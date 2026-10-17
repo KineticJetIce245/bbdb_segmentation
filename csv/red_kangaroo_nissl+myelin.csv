@@ -1,0 +1,21 @@
+group,specimen,species,stain,section,base,image,segmentation,flip,rotation
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,0100,redroo_sec0100,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec0100.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec0100.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,0103,redroo_sec0103,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec0103.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec0103.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,0300,redroo_sec0300,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec0300.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec0300.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,0313,redroo_sec0313,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec0313.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec0313.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,0500,redroo_sec0500,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec0500.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec0500.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,0507,redroo_sec0507,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec0507.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec0507.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,0700,redroo_sec0700,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec0700.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec0700.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,0707,redroo_sec0707,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec0707.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec0707.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,0900,redroo_sec0900,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec0900.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec0900.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,0907,redroo_sec0907,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec0907.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec0907.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,1100,redroo_sec1100,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec1100.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec1100.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,1103,redroo_sec1103,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec1103.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec1103.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,1300,redroo_sec1300,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec1300.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec1300.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,1307,redroo_sec1307,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec1307.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec1307.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,1497,redroo_sec1497,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec1497.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec1497.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,1500,redroo_sec1500,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec1500.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec1500.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,1697,redroo_sec1697,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec1697.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec1697.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,1700,redroo_sec1700,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec1700.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec1700.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,1893,redroo_sec1893,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec1893.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec1893.png,,0
+red_kangaroo_nissl+myelin,red_kangaroo,Macropus rufus,nissl+myelin,1900,redroo_sec1900,v.1/sections/red_kangaroo_nissl+myelin/redroo_sec1900.jpg,segmentations/red_kangaroo_nissl+myelin/redroo_sec1900.png,,0

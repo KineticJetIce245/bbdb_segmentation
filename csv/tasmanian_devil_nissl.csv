@@ -1,0 +1,24 @@
+group,specimen,species,stain,section,base,image,segmentation,flip,rotation
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,057,tasdev057,v.1/sections/tasmanian_devil_nissl/tasdev057.jpg,segmentations/tasmanian_devil_nissl/tasdev057.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,060,tasdev060,v.1/sections/tasmanian_devil_nissl/tasdev060.jpg,segmentations/tasmanian_devil_nissl/tasdev060.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,092,tasdev092,v.1/sections/tasmanian_devil_nissl/tasdev092.jpg,segmentations/tasmanian_devil_nissl/tasdev092.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,097,tasdev097,v.1/sections/tasmanian_devil_nissl/tasdev097.jpg,segmentations/tasmanian_devil_nissl/tasdev097.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,120,tasdev120,v.1/sections/tasmanian_devil_nissl/tasdev120.jpg,segmentations/tasmanian_devil_nissl/tasdev120.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,127,tasdev127,v.1/sections/tasmanian_devil_nissl/tasdev127.jpg,segmentations/tasmanian_devil_nissl/tasdev127.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,150,tasdev150,v.1/sections/tasmanian_devil_nissl/tasdev150.jpg,segmentations/tasmanian_devil_nissl/tasdev150.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,153,tasdev153,v.1/sections/tasmanian_devil_nissl/tasdev153.jpg,segmentations/tasmanian_devil_nissl/tasdev153.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,180,tasdev180,v.1/sections/tasmanian_devil_nissl/tasdev180.jpg,segmentations/tasmanian_devil_nissl/tasdev180.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,181,tasdev181,v.1/sections/tasmanian_devil_nissl/tasdev181.jpg,segmentations/tasmanian_devil_nissl/tasdev181.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,210,tasdev210,v.1/sections/tasmanian_devil_nissl/tasdev210.jpg,segmentations/tasmanian_devil_nissl/tasdev210.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,211,tasdev211,v.1/sections/tasmanian_devil_nissl/tasdev211.jpg,segmentations/tasmanian_devil_nissl/tasdev211.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,244,tasdev244,v.1/sections/tasmanian_devil_nissl/tasdev244.jpg,segmentations/tasmanian_devil_nissl/tasdev244.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,245,tasdev245,v.1/sections/tasmanian_devil_nissl/tasdev245.jpg,segmentations/tasmanian_devil_nissl/tasdev245.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,270,tasdev270,v.1/sections/tasmanian_devil_nissl/tasdev270.jpg,segmentations/tasmanian_devil_nissl/tasdev270.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,271,tasdev271,v.1/sections/tasmanian_devil_nissl/tasdev271.jpg,segmentations/tasmanian_devil_nissl/tasdev271.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,301,tasdev301,v.1/sections/tasmanian_devil_nissl/tasdev301.jpg,segmentations/tasmanian_devil_nissl/tasdev301.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,302,tasdev302,v.1/sections/tasmanian_devil_nissl/tasdev302.jpg,segmentations/tasmanian_devil_nissl/tasdev302.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,331,tasdev331,v.1/sections/tasmanian_devil_nissl/tasdev331.jpg,segmentations/tasmanian_devil_nissl/tasdev331.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,332,tasdev332,v.1/sections/tasmanian_devil_nissl/tasdev332.jpg,segmentations/tasmanian_devil_nissl/tasdev332.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,361,tasdev361,v.1/sections/tasmanian_devil_nissl/tasdev361.jpg,segmentations/tasmanian_devil_nissl/tasdev361.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,362,tasdev362,v.1/sections/tasmanian_devil_nissl/tasdev362.jpg,segmentations/tasmanian_devil_nissl/tasdev362.png,,0
+tasmanian_devil_nissl,tasmanian_devil,Sarcophilus harrisii,nissl,65656,Tasdevil65656clr,v.1/sections/tasmanian_devil_nissl/Tasdevil65656clr.jpg,segmentations/tasmanian_devil_nissl/Tasdevil65656clr.png,,0

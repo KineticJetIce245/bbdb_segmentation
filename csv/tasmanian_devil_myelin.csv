@@ -1,0 +1,12 @@
+group,specimen,species,stain,section,base,image,segmentation,flip,rotation
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,057,tasdev057,v.1/sections/tasmanian_devil_myelin/tasdev057.jpg,segmentations/tasmanian_devil_myelin/tasdev057.png,,0
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,097,tasdev097,v.1/sections/tasmanian_devil_myelin/tasdev097.jpg,segmentations/tasmanian_devil_myelin/tasdev097.png,,0
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,127,tasdev127,v.1/sections/tasmanian_devil_myelin/tasdev127.jpg,segmentations/tasmanian_devil_myelin/tasdev127.png,,0
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,153,tasdev153,v.1/sections/tasmanian_devil_myelin/tasdev153.jpg,segmentations/tasmanian_devil_myelin/tasdev153.png,,0
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,181,tasdev181,v.1/sections/tasmanian_devil_myelin/tasdev181.jpg,segmentations/tasmanian_devil_myelin/tasdev181.png,,0
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,211,tasdev211,v.1/sections/tasmanian_devil_myelin/tasdev211.jpg,segmentations/tasmanian_devil_myelin/tasdev211.png,,0
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,245,tasdev245,v.1/sections/tasmanian_devil_myelin/tasdev245.jpg,segmentations/tasmanian_devil_myelin/tasdev245.png,,0
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,271,tasdev271,v.1/sections/tasmanian_devil_myelin/tasdev271.jpg,segmentations/tasmanian_devil_myelin/tasdev271.png,,0
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,301,tasdev301,v.1/sections/tasmanian_devil_myelin/tasdev301.jpg,segmentations/tasmanian_devil_myelin/tasdev301.png,,0
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,331,tasdev331,v.1/sections/tasmanian_devil_myelin/tasdev331.jpg,segmentations/tasmanian_devil_myelin/tasdev331.png,,0
+tasmanian_devil_myelin,tasmanian_devil,Sarcophilus harrisii,myelin,361,tasdev361,v.1/sections/tasmanian_devil_myelin/tasdev361.jpg,segmentations/tasmanian_devil_myelin/tasdev361.png,,0

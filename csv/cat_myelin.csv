@@ -1,0 +1,16 @@
+group,specimen,species,stain,section,base,image,segmentation,flip,rotation
+cat_myelin,cat,Felis catus,myelin,105,catsec_m105,v.1/sections/cat_myelin/catsec_m105.jpg,segmentations/cat_myelin/catsec_m105.png,,0
+cat_myelin,cat,Felis catus,myelin,117,catsec_m117,v.1/sections/cat_myelin/catsec_m117.jpg,segmentations/cat_myelin/catsec_m117.png,,0
+cat_myelin,cat,Felis catus,myelin,145,catsec_m145,v.1/sections/cat_myelin/catsec_m145.jpg,segmentations/cat_myelin/catsec_m145.png,,0
+cat_myelin,cat,Felis catus,myelin,185,catsec_m185,v.1/sections/cat_myelin/catsec_m185.jpg,segmentations/cat_myelin/catsec_m185.png,,0
+cat_myelin,cat,Felis catus,myelin,217,catsec_m217,v.1/sections/cat_myelin/catsec_m217.jpg,segmentations/cat_myelin/catsec_m217.png,,0
+cat_myelin,cat,Felis catus,myelin,251,catsec_m251,v.1/sections/cat_myelin/catsec_m251.jpg,segmentations/cat_myelin/catsec_m251.png,,0
+cat_myelin,cat,Felis catus,myelin,327,catsec_m327,v.1/sections/cat_myelin/catsec_m327.jpg,segmentations/cat_myelin/catsec_m327.png,,0
+cat_myelin,cat,Felis catus,myelin,351,catsec_m351,v.1/sections/cat_myelin/catsec_m351.jpg,segmentations/cat_myelin/catsec_m351.png,,0
+cat_myelin,cat,Felis catus,myelin,359,catsec_m359,v.1/sections/cat_myelin/catsec_m359.jpg,segmentations/cat_myelin/catsec_m359.png,,0
+cat_myelin,cat,Felis catus,myelin,387,catsec_m387,v.1/sections/cat_myelin/catsec_m387.jpg,segmentations/cat_myelin/catsec_m387.png,,0
+cat_myelin,cat,Felis catus,myelin,399,catsec_m399,v.1/sections/cat_myelin/catsec_m399.jpg,segmentations/cat_myelin/catsec_m399.png,,0
+cat_myelin,cat,Felis catus,myelin,419,catsec_m419,v.1/sections/cat_myelin/catsec_m419.jpg,segmentations/cat_myelin/catsec_m419.png,,0
+cat_myelin,cat,Felis catus,myelin,425,catsec_m425,v.1/sections/cat_myelin/catsec_m425.jpg,segmentations/cat_myelin/catsec_m425.png,,0
+cat_myelin,cat,Felis catus,myelin,431,catsec_m431,v.1/sections/cat_myelin/catsec_m431.jpg,segmentations/cat_myelin/catsec_m431.png,,0
+cat_myelin,cat,Felis catus,myelin,437,catsec_m437,v.1/sections/cat_myelin/catsec_m437.jpg,segmentations/cat_myelin/catsec_m437.png,,0

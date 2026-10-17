@@ -1,0 +1,17 @@
+group,specimen,species,stain,section,base,image,segmentation,flip,rotation
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,1199,1199fibun,v.1/sections/dolphin_myelin/1199fibun.jpg,segmentations/dolphin_myelin/1199fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,1300,1300fibun,v.1/sections/dolphin_myelin/1300fibun.jpg,segmentations/dolphin_myelin/1300fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,1400,1400fibun,v.1/sections/dolphin_myelin/1400fibun.jpg,segmentations/dolphin_myelin/1400fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,1500,1500fibun,v.1/sections/dolphin_myelin/1500fibun.jpg,segmentations/dolphin_myelin/1500fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,1600,1600fibun,v.1/sections/dolphin_myelin/1600fibun.jpg,segmentations/dolphin_myelin/1600fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,1700,1700fibun,v.1/sections/dolphin_myelin/1700fibun.jpg,segmentations/dolphin_myelin/1700fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,1800,1800fibun,v.1/sections/dolphin_myelin/1800fibun.jpg,segmentations/dolphin_myelin/1800fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,1900,1900fibun,v.1/sections/dolphin_myelin/1900fibun.jpg,segmentations/dolphin_myelin/1900fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,2000,2000fibun,v.1/sections/dolphin_myelin/2000fibun.jpg,segmentations/dolphin_myelin/2000fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,2100,2100fibun,v.1/sections/dolphin_myelin/2100fibun.jpg,segmentations/dolphin_myelin/2100fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,2200,2200fibun,v.1/sections/dolphin_myelin/2200fibun.jpg,segmentations/dolphin_myelin/2200fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,2300,2300fibun,v.1/sections/dolphin_myelin/2300fibun.jpg,segmentations/dolphin_myelin/2300fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,2400,2400fibun,v.1/sections/dolphin_myelin/2400fibun.jpg,segmentations/dolphin_myelin/2400fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,2500,2500fibun,v.1/sections/dolphin_myelin/2500fibun.jpg,segmentations/dolphin_myelin/2500fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,2600,2600fibun,v.1/sections/dolphin_myelin/2600fibun.jpg,segmentations/dolphin_myelin/2600fibun.png,,0
+dolphin_myelin,dolphin,Tursiops truncatus,myelin,2700,2700fibun,v.1/sections/dolphin_myelin/2700fibun.jpg,segmentations/dolphin_myelin/2700fibun.png,,0

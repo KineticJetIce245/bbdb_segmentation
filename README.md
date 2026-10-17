@@ -1,0 +1,687 @@
+# BBDB Cortex Segmentation
+
+A brainhack project to segment the **cerebral cortex** by hand in brain
+sections from many mammal species. The sections come from the **Brain
+Biodiversity Bank** (BBDB). The project includes a small desktop tool to make
+the work quick. Each section opens with a starting mask from an **Otsu
+threshold**. You can move the threshold with a slider and then fix the mask with
+a brush, paint bucket and undo. The finished masks are saved as 0/1 PNGs in this
+repository so they can be committed and shared.
+
+The work is split into one CSV per **specimen and stain** (for example
+`csv/lion_nissl.csv`). Participants can each take one or more CSVs. A section
+counts as **done** once its mask file exists. Opening a CSV only shows the
+sections that are not done yet.
+
+> **TL;DR:** for each section, paint the **cerebral cortex** (the grey matter
+> ribbon on the surface of the cerebral hemispheres) and nothing else. See
+> [What to segment](#what-to-segment-the-cerebral-cortex).
+>
+> **Data:** download the images from
+> [Google Drive](https://drive.google.com/drive/folders/1xKnObX2FhnvCv1kEoc2XopjUlRqNYZTq?usp=sharing)
+> and unzip them **inside this repository folder**. See
+> [Step 2](#step-2-get-the-image-data).
+
+---
+
+## Contents
+
+- [Why this project?](#why-this-project)
+- [What to segment: the cerebral cortex](#what-to-segment-the-cerebral-cortex)
+- [Background: the two types of sections](#background-the-two-types-of-sections)
+- [Features](#features)
+- [Repository layout](#repository-layout)
+- [Requirements](#requirements)
+- [Installation](#installation)
+  - [Recommended graphical tools](#recommended-graphical-tools)
+  - [Step 1: Get the code](#step-1-get-the-code)
+  - [Step 2: Get the image data](#step-2-get-the-image-data)
+  - [Step 3: Install Python and the dependencies](#step-3-install-python-and-the-dependencies)
+- [Running the GUI](#running-the-gui)
+- [Using the GUI](#using-the-gui)
+  - [Window layout](#window-layout)
+  - [Threshold](#threshold)
+  - [Keyboard shortcuts](#keyboard-shortcuts)
+  - [Mouse](#mouse)
+  - [Contrast and opacity](#contrast-and-opacity)
+  - [Typical workflow](#typical-workflow)
+- [Outputs](#outputs)
+- [Submitting your segmentations](#submitting-your-segmentations)
+- [Stretch goal: bootstrap with synthetic data and nnU-Net](#stretch-goal-bootstrap-with-synthetic-data-and-nnu-net)
+- [Regenerating the CSVs](#regenerating-the-csvs)
+- [Command-line options](#command-line-options)
+- [Troubleshooting](#troubleshooting)
+- [How it works](#how-it-works)
+- [License](#license)
+
+---
+
+## Why this project?
+
+To study cortical microstructure in 2D post-mortem brain sections, you first
+need an accurate cortical segmentation. That is hard to automate. Contrast
+varies a lot between stains, imaging modalities and species, and the cortex has
+layers that change in intensity.
+
+We have developed **CAPS** (cortical all-purpose segmentation). It is a U-Net
+that we trained **only on synthetic 2D sections**. To make them, we sliced 3D
+label volumes from the human, chimpanzee, macaque and marmoset, deformed them
+randomly, and gave each region random intensities and imaging artefacts. The
+multi-species model works well on real autoradiography, histology and ex vivo
+MRI. It also works on species it never saw during training.
+
+So far, though, our out-of-sample test was very small: **one** histological
+section each from the sea lion, cat, pig and owl monkey. The Brain Biodiversity
+Bank has thousands of sections from dozens of species, but they don't have cortical labels. Therefore, we need your help to manully segmnt more of these sections. Manually segmented sections are shared openly on Zenodo and we can add you as a contributor.
+
+If time permits and we have enough sections, we can also train a
+  model on what has been segmented so far, use its predictions as starting
+  masks for the rest, and repeat. See
+  [Stretch goal: bootstrap with synthetic data and nnU-Net](#stretch-goal-bootstrap-with-synthetic-data-and-nnu-net).
+
+
+The segmentations you create here will be used to:
+
+- **A) test generalisation.** We will measure how well CAPS segments the cortex
+  in species and stains that were not used to train it.
+- **B) make more training data.** We will generate new 2D synthetic training
+  images from the 2D segmentations themselves. That expands the variety of
+  anatomy the model learns from, beyond the four species we have 3D atlases for.
+
+Every section you segment adds to all of these.  The sections come from the Welker, Johnson &
+Noe Comparative Mammalian Brain Collection
+(<https://brains.anatomy.msu.edu>).
+
+---
+
+## What to segment: the cerebral cortex
+
+Paint **only the cerebral cortex**: the ribbon of grey matter that forms the
+outer surface of the cerebral hemispheres and follows every gyrus and sulcus.
+The mask should be `1` on the cortex and `0` everywhere else.
+
+| Include (mask = 1)                                  | Exclude (mask = 0)                                          |
+| --------------------------------------------------- | ----------------------------------------------------------- |
+| Cerebral cortex grey matter, from the pial surface down to the grey/white boundary | White matter beneath the cortex                             |
+| Cortex deep inside sulci, including where two banks touch | **Cerebellum**, even though it is also a folded cortex      |
+|                                                     | Brainstem, thalamus, basal ganglia and other deep nuclei    |
+|                                                     | Background, ventricles, tears/holes, debris                 |
+|                                                     | Text, specimen numbers, scale bars and logos                |
+
+The examples below come from existing manual annotations of BBDB Nissl
+sections. The left column shows the original section and the right column the
+cortex label in red. Notice what is left out:
+
+- the cerebellum in the sea lion (its folia stain very dark, but they are not
+  cerebral cortex);
+- the cerebellum and brainstem in the mongoose, where only the thin cerebral
+  cortex at the top is labelled;
+- the brainstem in every example.
+
+![Examples of cortical segmentations in four species](docs/cortex_examples.jpg)
+
+Tips:
+
+- Draw the grey/white boundary where the dark grey matter meets the paler white
+  matter (in Nissl sections). If you are unsure, lean towards following the
+  visible contrast edge.
+- Where the two banks of a sulcus touch, keep them in the mask, but leave any
+  visible gap of background between them unpainted.
+- It's fine to be approximate at a pixel level. Missing a whole gyrus or
+  including the cerebellum matters much more.
+- If a section has **no cerebral cortex** (e.g. only cerebellum and brainstem),
+  press **Clear** and then **Enter**. That saves an empty mask so the section
+  counts as done.
+- If a section is unusable (badly torn, out of focus, or not a brain section),
+  save an empty mask and mention the section in your pull request.
+
+---
+
+## Background: the two types of sections
+
+The Brain Biodiversity Bank contains two different types of sections, and they
+look quite different from each other. Understanding why matters for choosing
+the right processing steps.
+
+**Nissl** sections are stained to show the density of neuron cell bodies. In
+these sections, the cortical grey matter appears **dark**.
+
+**"Myelin"** sections are labelled by the Bank as "myelin", but that name is a
+little misleading. Myelin itself is the fatty substance that wraps around
+neuronal axons. It insulates them and keeps the electrical signal (the action
+potential) from leaking, much like the plastic coating on a wire. The name
+refers to what is being visualised, not to the stain. The stain actually used
+is probably Gallyas, though the Bank chose to organise the data by "myelin"
+rather than by stain name. In these sections, the cortical grey matter appears
+**bright**, the opposite of Nissl. The densely myelinated white matter appears
+very dark.
+
+![Adjacent Nissl and myelin sections from the same mandrill](docs/nissl_vs_myelin.jpg)
+
+What this means for the threshold tool:
+
+- **Nissl:** with **Invert** on (the default for these images), the Otsu mask
+  usually selects most of the tissue. Try **lowering** the threshold so that
+  only the darker cortex stays selected. Then erase the cerebellum, brainstem
+  and any remaining white matter, and use **Fill** to close small holes.
+- **Myelin:** the cortex is the pale band *between* the dark white matter and
+  the white background, so one threshold can't isolate it. One approach is to
+  keep **Invert** on and **raise** the threshold until the whole section is
+  selected, then erase the dark white matter and the cerebellum. You can also
+  simply paint the cortex with the brush. Raising **Contrast min** can make the
+  pale cortex easier to see.
+- The `owl_monkey_nissl+myelin` and `red_kangaroo_nissl+myelin` groups mix both
+  kinds, so check which kind each section is before you start.
+
+---
+
+## Features
+
+- Opens only the sections in a CSV that **do not have a segmentation yet**, one
+  after another.
+- A **threshold slider** builds the mask from the image. Pixels at or above the
+  level become `1` and pixels below become `0`. The slider starts at the
+  image's **Otsu threshold**.
+- An **Invert** option selects pixels *below* the level instead. Most BBDB
+  sections are dark tissue on a white background, so Invert is switched on
+  automatically when the image border falls in the bright class.
+- You can **draw** and **erase** with the brush, **clear** the mask, or
+  **erode** / **dilate** it by one pixel.
+- A **paint bucket** fills a connected region of the mask in one click, for
+  example a hole inside the tissue. Right-click with the bucket empties a
+  region instead.
+- **Undo** (Ctrl+Z) reverts the last mask change, up to 30 steps per section.
+- You can **rotate** the view in 90° steps and **flip** it horizontally or
+  vertically. The choice is recorded in the CSV. The saved mask always stays
+  aligned with the original image.
+- **Overlay opacity** and **contrast** sliders change only what you see on
+  screen.
+- Your work **autosaves**, and you can quit and resume at any time.
+
+---
+
+## Repository layout
+
+```
+segment_gui.py              # the segmentation GUI
+make_segmentation_csvs.py   # builds csv/*.csv from sect_info.csv + the image folders
+common.py                   # shared flip/rotation and path helpers
+sect_info.csv               # specimen / species / stain / section metadata for every image
+requirements.txt            # Python dependencies
+csv/                        # one CSV per specimen_stain  (the GUI input; tracked in git)
+segmentations/              # saved masks, one folder per specimen_stain (tracked in git)
+docs/                       # figures used in this README
+```
+
+The source images are **not** in this repository because they are too large.
+Download them from
+[Google Drive](https://drive.google.com/drive/folders/1xKnObX2FhnvCv1kEoc2XopjUlRqNYZTq?usp=sharing)
+and unzip them inside the repository folder. See
+[Step 2](#step-2-get-the-image-data).
+
+---
+
+## Requirements
+
+- **Python 3.8 or newer**
+- Python packages from `requirements.txt`: `numpy`, `pandas`, `Pillow`, `scipy`
+- **Tkinter**, Python's built-in GUI toolkit. The official Python installers
+  for Windows and macOS include it. On Linux you install it separately as
+  `python3-tk`.
+
+The GUI opens a window, so you need a graphical desktop.
+
+---
+
+## Installation
+
+### Recommended graphical tools
+
+| Purpose | Tool | Notes |
+| ------- | ---- | ----- |
+| Git with a GUI | **[GitHub Desktop](https://desktop.github.com/)** | Windows & macOS. Use it to clone the repo and later to **commit and push** your segmentations. |
+| Python with a GUI | **[Anaconda](https://www.anaconda.com/download)** | Windows, macOS & Linux. Comes with **Anaconda Prompt**, a terminal that is ready to use. |
+| Beginner Python editor | **[Thonny](https://thonny.org/)** | Comes with its own Python and has a simple **Run** button. |
+
+### Step 1: Get the code
+
+Because you will submit your masks back to the repository, **clone it with git**
+rather than downloading a ZIP:
+
+- **GitHub Desktop:** click **Clone**, paste the repository URL, and choose a
+  local folder.
+- **Command line:**
+  ```bash
+  git clone https://github.com/<your-org>/<your-repo>.git
+  cd <your-repo>
+  ```
+
+### Step 2: Get the image data
+
+The images are **not** in this repository. Download them from Google Drive:
+
+**Data download: <https://drive.google.com/drive/folders/1xKnObX2FhnvCv1kEoc2XopjUlRqNYZTq?usp=sharing>**
+
+1. Open the link and click **Download** (top right, or right-click the
+   `brain_biodiversity_bank` folder → **Download**). Google Drive zips the
+   folder first, which takes a minute. You get a file of about **1 GB** named
+   something like `brain_biodiversity_bank-20261017T220021Z-1-001.zip`.
+2. **Move the zip into the repository folder** (the folder that contains
+   `segment_gui.py`) and unzip it there. On Windows, right-click → **Extract
+   All…**. On macOS, double-click. On Linux, run `unzip brain_biodiversity_bank-*.zip`.
+3. Check that the result looks like this:
+
+```
+bbdb_segmentation/                          # this repository
+  segment_gui.py
+  csv/
+  ...
+  brain_biodiversity_bank-XXXXXXXX/         # created by unzipping (the name may vary)
+    brain_biodiversity_bank/
+      v.1/
+        sections/
+          lion_nissl/1000lion6279.jpg
+          ...
+```
+
+The GUI then finds the data automatically. Things to know:
+
+- The folder is listed in `.gitignore`, so the images are **never committed**.
+  You can delete the zip after extracting.
+- The extra `brain_biodiversity_bank-XXXXXXXX/` wrapper folder is optional.
+  `bbdb_segmentation/brain_biodiversity_bank/v.1/sections/...` works too.
+- Putting the data folder **next to** the repository (in the same parent
+  folder) also works.
+- If Google Drive splits the download into several zips (`…-1-001.zip`,
+  `…-1-002.zip`, …), extract them all so that their contents end up in the
+  **same** `brain_biodiversity_bank/v.1/sections/` folder.
+
+If you keep the data somewhere else, pass
+`--data-root /path/to/brain_biodiversity_bank` (the folder that contains
+`v.1/`). Or just choose that folder when the GUI asks for it.
+
+### Step 3: Install Python and the dependencies
+
+Open a terminal **in the repository folder**, then run the commands for your
+operating system.
+
+**Windows.** Install Python from <https://www.python.org/downloads/windows/>
+and keep **"tcl/tk and IDLE"** checked during installation. Then run:
+
+```powershell
+py -3 -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**macOS.** Install Python from <https://www.python.org/downloads/macos/>. If you
+use Homebrew instead, also run `brew install python-tk`. Then run:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**Linux (Ubuntu / Debian):**
+
+```bash
+sudo apt install -y python3 python3-venv python3-pip python3-tk
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+The virtual environment (`.venv`) is optional. If you skip it, you can
+double-click `segment_gui.py` on Windows to start the GUI.
+
+---
+
+## Running the GUI
+
+```bash
+# Linux/macOS
+python segment_gui.py csv/lion_nissl.csv
+
+# Windows
+python segment_gui.py csv\lion_nissl.csv
+```
+
+If you run `python segment_gui.py` without a CSV, a file picker opens so you can
+choose one.
+
+If every section in the CSV already has a mask, the GUI asks whether you want to
+review them anyway. To always open every section, use `--all`.
+
+---
+
+## Using the GUI
+
+### Window layout
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Undo  Clear  Erode/Dilate │ toolbar
+│ Brush ±  Accept & next (Enter)  ● segmented / ○ not saved                   │
+├──────────────────────────────────────────────────────────────────────────┤
+│ Threshold [====|====]  Otsu  ☑ Invert  Otsu: 214  Opacity  Contrast …    │ sliders
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│                section image with red mask overlay                       │ canvas
+│                                                                          │
+├──────────────────────────────────────────────────────────────────────────┤
+│ 3 / 102 (99 left)   lion_nissl  1000lion6279   mask: threshold   flip…   │ status
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+The status bar shows:
+
+- your position in the list and how many sections are still left;
+- the section name;
+- where the mask came from:
+  - `threshold`: generated from the slider;
+  - `edited`: changed by hand;
+  - `saved`: loaded from an existing file;
+- the flip/rotation currently applied.
+
+### Threshold
+
+- When a section loads, the **Threshold** slider is set to that image's Otsu
+  level, which gives you a starting mask.
+- Dragging the slider **rebuilds the mask from the image**. Pixels at or above
+  the level become `1`. With **Invert** checked, pixels below the level become
+  `1` instead.
+- **Otsu (t)** puts the slider back to the Otsu level.
+- **Invert (i)** is set automatically for each image, but you can toggle it.
+- Moving the slider or toggling Invert **replaces any brush edits**, so set the
+  threshold first and paint afterwards. If you move the slider by accident,
+  **Undo** brings your edits back; a whole slider drag counts as one step.
+- See [the two types of sections](#background-the-two-types-of-sections) for
+  threshold strategies for Nissl and myelin sections.
+
+### Keyboard shortcuts
+
+| Key            | Action                                         |
+| -------------- | ---------------------------------------------- |
+| `Enter`        | Accept the current mask (save it) and go next  |
+| Left / Up      | Previous section                               |
+| Right / Down   | Next section                                   |
+| `t`            | Reset threshold to Otsu                        |
+| `i`            | Toggle Invert                                  |
+| `r`            | Rotate 90°                                     |
+| `h` / `v`      | Flip horizontal / vertical                     |
+| `e`            | Toggle the brush between draw and erase        |
+| `f`            | Toggle the paint bucket (fill)                 |
+| `Ctrl+Z` / `u` | Undo the last mask change                      |
+| `c`            | Clear the whole mask                           |
+| `E` / `D`      | Erode / dilate the mask by one pixel           |
+| `[` / `]`      | Smaller / larger brush                         |
+| `s`            | Save the current mask now                      |
+| `Esc` / `q`    | Save and quit                                  |
+
+### Mouse
+
+| Action              | Effect                                             |
+| ------------------- | -------------------------------------------------- |
+| Left-click / drag   | Paint the mask (or erase if Mode is set to Erase)  |
+| Right-click / drag  | Erase the mask (always)                            |
+| Left-click (Fill)   | Fill the connected region under the cursor         |
+| Right-click (Fill)  | Empty the connected region under the cursor        |
+| Mouse wheel         | Change brush size                                  |
+
+The **Mode** button cycles through Draw → Erase → Fill. In Fill mode the
+cursor becomes a crosshair. The bucket fills the 4-connected region of the
+*mask* under the cursor; it does not look at image intensities. To fill a
+hole, first make sure its outline is closed, painting across any gaps with the
+brush, otherwise the fill leaks into the background. If that happens, press
+**Undo**.
+
+### Contrast and opacity
+
+- **Overlay opacity** fades the red mask in and out.
+- **Contrast min / max** sets the display brightness window.
+- **Auto** stretches the window to the image's own range.
+- **Reset** restores the full range.
+
+None of these change the threshold, which always uses the original pixel
+values, or the saved mask.
+
+### Typical workflow
+
+1. Open your assigned CSV. The first section that isn't segmented yet loads
+   with its Otsu mask.
+2. Adjust **Threshold** (and **Invert** if needed) until the mask is as close
+   to the cerebral cortex as possible.
+3. Fix the rest by hand. Erase the white matter, cerebellum, brainstem and any
+   text. Left-drag adds to the mask, right-drag removes from it, the **Fill**
+   bucket fills holes, and `E`/`D` trims or grows the edges. Use **Undo**
+   (Ctrl+Z) to back out a mistake.
+4. If the orientation looks wrong, use **Rotate** / **Flip**.
+5. Press **Enter** to save the mask and move to the next section. Unedited
+   masks are only saved when you press Enter. Any edit is also autosaved.
+6. You can quit at any time with `q`. When you re-open the same CSV, it shows
+   only the sections that are still missing.
+
+---
+
+## Outputs
+
+- **Masks:** `segmentations/<specimen>_<stain>/<section>.png`. The exact path
+  for each section is in the CSV's `segmentation` column.
+  - Each mask is a single-channel 8-bit PNG at the **native resolution** of the
+    source image, with values `0` (background) and `1` (tissue).
+  - The masks look black in normal image viewers because `1` is nearly black.
+    This is expected.
+- **Flip/rotation:** written back into the CSV you opened, in the `flip` column
+  (empty, `LR`, `UP`, or `LR+UP`) and the `rotation` column (number of 90°
+  steps).
+
+CSV columns:
+
+| Column         | Meaning                                                      |
+| -------------- | ------------------------------------------------------------ |
+| `group`        | `<specimen>_<stain>`; one CSV per group                      |
+| `specimen`     | Common name (e.g. `lion`)                                     |
+| `species`      | Scientific name (e.g. `Panthera leo`)                        |
+| `stain`        | `nissl`, `myelin`, or `nissl+myelin`                         |
+| `section`      | Section number                                               |
+| `base`         | Unique section name, used as the mask filename               |
+| `image`        | Source image path, relative to the data folder               |
+| `segmentation` | Output mask path, relative to this repository                |
+| `flip`         | Recorded flip                                                |
+| `rotation`     | Recorded rotation (90° steps)                                |
+
+---
+
+## Submitting your segmentations
+
+Commit the new masks and your CSV, then push them, or open a pull request if
+you don't have push access.
+
+```bash
+git pull
+git add segmentations/ csv/
+git commit -m "Segment lion_nissl sections"
+git push
+```
+
+In **GitHub Desktop**, the new files appear under **Changes**. Write a summary,
+click **Commit**, then click **Push origin**.
+
+Only work on the CSVs you have been assigned. That way two people never edit
+the same files.
+
+---
+
+## Stretch goal: bootstrap with synthetic data and nnU-Net
+
+If you have time and some Python experience, you can turn the masks into a
+model that speeds up the rest of the manual work. The idea is a loop:
+
+```mermaid
+flowchart LR
+    A[Manual masks<br/>segmentations/] --> B[Simple synthetic<br/>images + labels]
+    A --> C[Real images + masks]
+    B --> D[Train nnU-Net]
+    C --> D
+    D --> E[Predict on<br/>unsegmented sections]
+    E --> F[Correct predictions<br/>in the GUI]
+    F --> A
+```
+
+Each round, the model's predictions become better starting masks than Otsu, so
+you spend less time correcting. Each correction then becomes new training data
+for the next round.
+
+### 1. Make simple synthetic images
+
+This follows the same idea as CAPS. The model should learn the *shape* of the
+cortex rather than one particular stain, so you generate many images with random
+contrasts from a few label maps. A minimal recipe for each segmented section:
+
+1. **Build a label map.** Start from the cortex mask (`1`). Add a rough tissue
+   mask from an Otsu threshold of the image, so you have background, non-cortex
+   tissue and cortex. Optionally split the cortex into 1–6 random "pseudo
+   layers" using the distance from the white-matter edge
+   (`scipy.ndimage.distance_transform_edt`).
+2. **Deform it** with a random affine and/or smooth elastic warp, using
+   nearest-neighbour interpolation for the labels.
+3. **Paint random intensities.** For each label, sample a mean and a standard
+   deviation and fill its pixels with Gaussian noise. Randomly decide whether
+   the cortex should be darker or brighter than its surroundings, to cover
+   both Nissl and myelin.
+4. **Add artefacts:** a smooth multiplicative bias field, blur or
+   down-sampling, and extra noise.
+5. The **target** is the deformed cortex mask, with values 0/1.
+
+A few hundred to a few thousand synthetic images, mixed with the real
+image/mask pairs, is a reasonable start. For a full-featured implementation,
+see <https://github.com/kwagstyl/caps>.
+
+### 2. Train nnU-Net
+
+Use [nnU-Net v2](https://github.com/MIC-DKFZ/nnUNet). It can read 2D PNG
+images directly:
+
+```
+nnUNet_raw/Dataset501_BBDBCortex/
+  imagesTr/case_0001_0000.png     # grayscale image (channel 0)
+  labelsTr/case_0001.png          # 0/1 mask, same size
+  dataset.json
+```
+
+Here is a minimal `dataset.json`:
+
+```json
+{
+  "channel_names": {"0": "gray"},
+  "labels": {"background": 0, "cortex": 1},
+  "numTraining": 1234,
+  "file_ending": ".png"
+}
+```
+
+Then run:
+
+```bash
+nnUNetv2_plan_and_preprocess -d 501 --verify_dataset_integrity
+nnUNetv2_train 501 2d 0
+nnUNetv2_predict -i unsegmented_pngs/ -o predictions/ -d 501 -c 2d -f 0
+```
+
+The `train/` folder in the BBDB data download already holds a few image/label
+pairs in nnU-Net's NIfTI format, which you can use as a reference.
+
+### 3. Use the predictions as starting masks
+
+- **Do not write predictions straight into `segmentations/`.** The GUI treats
+  any existing file there as a finished section and skips it, so unreviewed
+  predictions would be counted as manual segmentations.
+- Keep predictions in a separate folder. Right now the GUI always starts from
+  the Otsu threshold. Adding an option to load a prediction as the starting
+  mask instead would make a nice hackathon contribution. For example, a
+  `--init-dir predictions/` flag could be read in `load_current()` in
+  `segment_gui.py`.
+- Every corrected prediction is a new manual mask. Retrain, predict again, and
+  repeat.
+
+---
+
+## Regenerating the CSVs
+
+Maintainers only. `make_segmentation_csvs.py` rebuilds `csv/*.csv` from
+`sect_info.csv` and the image folders:
+
+```bash
+python make_segmentation_csvs.py --data-root /path/to/brain_biodiversity_bank
+```
+
+- It uses `sect_info.csv` for the specimen, species, stain and section metadata.
+- It also adds images that are on disk but missing from `sect_info.csv`
+  (e.g. upper-case `.JPG` files) to their group.
+- It skips the existing `*_manual*` annotation files.
+- It keeps any flip/rotation already recorded in the CSVs, and it never touches
+  the masks.
+
+---
+
+## Command-line options
+
+```
+python segment_gui.py [CSV] [--data-root DIR] [--seg-root DIR] [--all]
+```
+
+| Option        | Default                    | Description                                                        |
+| ------------- | -------------------------- | ------------------------------------------------------------------ |
+| `CSV`         | *(file picker if omitted)* | Group CSV to segment, e.g. `csv/lion_nissl.csv`.                   |
+| `--data-root` | auto-detected              | The `brain_biodiversity_bank` folder (contains `v.1/`).            |
+| `--seg-root`  | this repository            | Folder that the CSV `segmentation` paths are relative to.          |
+| `--all`       | off                        | Open every section, not just those without a segmentation.         |
+
+---
+
+## Troubleshooting
+
+**`No module named 'tkinter'`**
+Install Tk. On Ubuntu/Debian, run `sudo apt install python3-tk`. With Homebrew,
+run `brew install python-tk`. On Windows, re-run the Python installer with
+**"tcl/tk and IDLE"** selected.
+
+**`No module named numpy` / `pandas` / `PIL` / `scipy`**
+Activate your virtual environment and run `pip install -r requirements.txt`.
+
+**"Images not found under data folder" / `Missing image: …`**
+The GUI couldn't find the image data. Pass
+`--data-root /path/to/brain_biodiversity_bank`, using the folder that contains
+`v.1/`.
+
+**The mask covers the background instead of the tissue**
+Toggle **Invert** (`i`).
+
+**The window doesn't open on a remote server**
+The GUI needs a display. Run it locally, or use `ssh -X` or a remote desktop.
+
+---
+
+## How it works
+
+- Images are loaded in grayscale. Very large images are downsampled to at most
+  1600 px on their longest side for editing.
+- Masks are scaled back to the image's native resolution, using
+  nearest-neighbour resampling, when they are saved.
+- The Otsu level is computed from the histogram of the grayscale image.
+- Flips and rotations change only the display. Brush strokes are mapped back
+  through the current transform, so the saved mask always lines up with the
+  original image on disk.
+- The recorded flip/rotation can be applied to both the image and the mask in a
+  later processing step.
+
+---
+
+## License
+
+No license file is included yet. If you publish this repository, add a
+`LICENSE` file (for example, MIT or BSD-3-Clause).

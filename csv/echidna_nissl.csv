@@ -1,0 +1,13 @@
+group,specimen,species,stain,section,base,image,segmentation,flip,rotation
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,6,Echidna6clr,v.1/sections/echidna_nissl/Echidna6clr.jpg,segmentations/echidna_nissl/Echidna6clr.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,457,echidna_msec457,v.1/sections/echidna_nissl/echidna_msec457.jpg,segmentations/echidna_nissl/echidna_msec457.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,531,echidna_msec531,v.1/sections/echidna_nissl/echidna_msec531.jpg,segmentations/echidna_nissl/echidna_msec531.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,539,echidna_msec539,v.1/sections/echidna_nissl/echidna_msec539.jpg,segmentations/echidna_nissl/echidna_msec539.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,551,echidna_msec551,v.1/sections/echidna_nissl/echidna_msec551.jpg,segmentations/echidna_nissl/echidna_msec551.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,561,echidna_msec561,v.1/sections/echidna_nissl/echidna_msec561.jpg,segmentations/echidna_nissl/echidna_msec561.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,460,echidna_nsec460,v.1/sections/echidna_nissl/echidna_nsec460.jpg,segmentations/echidna_nissl/echidna_nsec460.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,530,echidna_nsec530,v.1/sections/echidna_nissl/echidna_nsec530.jpg,segmentations/echidna_nissl/echidna_nsec530.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,540,echidna_nsec540,v.1/sections/echidna_nissl/echidna_nsec540.jpg,segmentations/echidna_nissl/echidna_nsec540.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,550,echidna_nsec550,v.1/sections/echidna_nissl/echidna_nsec550.jpg,segmentations/echidna_nissl/echidna_nsec550.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,560,echidna_nsec560,v.1/sections/echidna_nissl/echidna_nsec560.jpg,segmentations/echidna_nissl/echidna_nsec560.png,,0
+echidna_nissl,echidna,Tachyglossus aculeatus,nissl,570,echidna_nsec570,v.1/sections/echidna_nissl/echidna_nsec570.jpg,segmentations/echidna_nissl/echidna_nsec570.png,,0

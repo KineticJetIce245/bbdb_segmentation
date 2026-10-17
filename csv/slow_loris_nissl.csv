@@ -1,0 +1,24 @@
+group,specimen,species,stain,section,base,image,segmentation,flip,rotation
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0041,LOco0041,v.1/sections/slow_loris_nissl/LOco0041.jpg,segmentations/slow_loris_nissl/LOco0041.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0042,LOco0042,v.1/sections/slow_loris_nissl/LOco0042.jpg,segmentations/slow_loris_nissl/LOco0042.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0227,LOco0227,v.1/sections/slow_loris_nissl/LOco0227.jpg,segmentations/slow_loris_nissl/LOco0227.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0228,LOco0228,v.1/sections/slow_loris_nissl/LOco0228.jpg,segmentations/slow_loris_nissl/LOco0228.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0325,LOco0325,v.1/sections/slow_loris_nissl/LOco0325.jpg,segmentations/slow_loris_nissl/LOco0325.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0326,LOco0326,v.1/sections/slow_loris_nissl/LOco0326.jpg,segmentations/slow_loris_nissl/LOco0326.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0425,LOco0425,v.1/sections/slow_loris_nissl/LOco0425.jpg,segmentations/slow_loris_nissl/LOco0425.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0426,LOco0426,v.1/sections/slow_loris_nissl/LOco0426.jpg,segmentations/slow_loris_nissl/LOco0426.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0525,LOco0525,v.1/sections/slow_loris_nissl/LOco0525.jpg,segmentations/slow_loris_nissl/LOco0525.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0526,LOco0526,v.1/sections/slow_loris_nissl/LOco0526.jpg,segmentations/slow_loris_nissl/LOco0526.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0621,LOco0621,v.1/sections/slow_loris_nissl/LOco0621.jpg,segmentations/slow_loris_nissl/LOco0621.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0624,LOco0624,v.1/sections/slow_loris_nissl/LOco0624.jpg,segmentations/slow_loris_nissl/LOco0624.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0723,LOco0723,v.1/sections/slow_loris_nissl/LOco0723.jpg,segmentations/slow_loris_nissl/LOco0723.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0724,LOco0724,v.1/sections/slow_loris_nissl/LOco0724.jpg,segmentations/slow_loris_nissl/LOco0724.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0823,LOco0823,v.1/sections/slow_loris_nissl/LOco0823.jpg,segmentations/slow_loris_nissl/LOco0823.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0826,LOco0826,v.1/sections/slow_loris_nissl/LOco0826.jpg,segmentations/slow_loris_nissl/LOco0826.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0924,LOco0924,v.1/sections/slow_loris_nissl/LOco0924.jpg,segmentations/slow_loris_nissl/LOco0924.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,0927,LOco0927,v.1/sections/slow_loris_nissl/LOco0927.jpg,segmentations/slow_loris_nissl/LOco0927.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,1023,Loco1023,v.1/sections/slow_loris_nissl/Loco1023.jpg,segmentations/slow_loris_nissl/Loco1023.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,1024,LOco1024,v.1/sections/slow_loris_nissl/LOco1024.jpg,segmentations/slow_loris_nissl/LOco1024.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,1127,LOco1127,v.1/sections/slow_loris_nissl/LOco1127.jpg,segmentations/slow_loris_nissl/LOco1127.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,1128,LOco1128,v.1/sections/slow_loris_nissl/LOco1128.jpg,segmentations/slow_loris_nissl/LOco1128.png,,0
+slow_loris_nissl,slow_loris,Nycticebus coucang,nissl,6,Slowloris6clr,v.1/sections/slow_loris_nissl/Slowloris6clr.jpg,segmentations/slow_loris_nissl/Slowloris6clr.png,,0

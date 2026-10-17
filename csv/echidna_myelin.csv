@@ -1,0 +1,6 @@
+group,specimen,species,stain,section,base,image,segmentation,flip,rotation
+echidna_myelin,echidna,Tachyglossus aculeatus,myelin,457,echidna_msec457,v.1/sections/echidna_myelin/echidna_msec457.jpg,segmentations/echidna_myelin/echidna_msec457.png,,0
+echidna_myelin,echidna,Tachyglossus aculeatus,myelin,531,echidna_msec531,v.1/sections/echidna_myelin/echidna_msec531.jpg,segmentations/echidna_myelin/echidna_msec531.png,,0
+echidna_myelin,echidna,Tachyglossus aculeatus,myelin,539,echidna_msec539,v.1/sections/echidna_myelin/echidna_msec539.jpg,segmentations/echidna_myelin/echidna_msec539.png,,0
+echidna_myelin,echidna,Tachyglossus aculeatus,myelin,551,echidna_msec551,v.1/sections/echidna_myelin/echidna_msec551.jpg,segmentations/echidna_myelin/echidna_msec551.png,,0
+echidna_myelin,echidna,Tachyglossus aculeatus,myelin,561,echidna_msec561,v.1/sections/echidna_myelin/echidna_msec561.jpg,segmentations/echidna_myelin/echidna_msec561.png,,0
