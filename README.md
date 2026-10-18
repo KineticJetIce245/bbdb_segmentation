@@ -194,6 +194,9 @@ What this means for the threshold tool:
 - You can **rotate** the view in 90° steps and **flip** it horizontally or
   vertically. The choice is recorded in the CSV. The saved mask always stays
   aligned with the original image.
+- You can **zoom** with the mouse wheel, `+` / `-`, and **pan** by dragging
+  with the middle mouse button or Ctrl+left. `0` fits the image to the window
+  again. Zooming and panning change only the view, never the saved mask.
 - **Overlay opacity** and **contrast** sliders change only what you see on
   screen.
 - Your work **autosaves**, and you can quit and resume at any time.
@@ -373,7 +376,7 @@ review them anyway. To always open every section, use `--all`.
 │                section image with red mask overlay                       │ canvas
 │                                                                          │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ 3 / 102 (99 left)   lion_nissl  1000lion6279   mask: threshold   flip…   │ status
+│ 3 / 102 (99 left)   lion_nissl  1000lion6279   mask: threshold   flip… zoom…│ status
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -385,7 +388,7 @@ The status bar shows:
   - `threshold`: generated from the slider;
   - `edited`: changed by hand;
   - `saved`: loaded from an existing file;
-- the flip/rotation currently applied.
+- the flip/rotation and zoom currently applied.
 
 ### Threshold
 
@@ -419,6 +422,8 @@ The status bar shows:
 | `c`            | Clear the whole mask                           |
 | `E` / `D`      | Erode / dilate the mask by one pixel           |
 | `[` / `]`      | Smaller / larger brush                         |
+| `+` / `=` / `-` | Zoom in / out at the mouse pointer            |
+| `0`            | Fit the image to the window                    |
 | `s`            | Save the current mask now                      |
 | `Esc` / `q`    | Save and quit                                  |
 
@@ -430,7 +435,14 @@ The status bar shows:
 | Right-click / drag  | Erase the mask (always)                            |
 | Left-click (Fill)   | Fill the connected region under the cursor         |
 | Right-click (Fill)  | Empty the connected region under the cursor        |
-| Mouse wheel         | Change brush size                                  |
+| Mouse wheel         | Zoom in / out at the pointer                       |
+| Shift + wheel       | Smaller / larger brush                             |
+| Middle-button drag  | Pan the view                                       |
+| Ctrl + left-drag    | Pan the view                                       |
+
+On macOS, the system may turn Ctrl+click into a secondary click. If
+Ctrl+left-drag does not pan, use a middle mouse button instead. Panning is
+clamped so the image cannot be dragged completely off the canvas.
 
 The **Mode** button cycles through Draw → Erase → Fill. In Fill mode the
 cursor becomes a crosshair. The bucket fills the 4-connected region of the
@@ -447,7 +459,7 @@ brush, otherwise the fill leaks into the background. If that happens, press
 - **Reset** restores the full range.
 
 None of these change the threshold, which always uses the original pixel
-values, or the saved mask.
+values, or the saved mask. Zoom and pan also change only the view.
 
 ### Typical workflow
 
@@ -676,6 +688,9 @@ The GUI needs a display. Run it locally, or use `ssh -X` or a remote desktop.
 - Flips and rotations change only the display. Brush strokes are mapped back
   through the current transform, so the saved mask always lines up with the
   original image on disk.
+- Zoom and pan also change only the display. The brush and cursor are mapped
+  through the current view transform, so the saved mask is unaffected by the
+  zoom level or scroll position.
 - The recorded flip/rotation can be applied to both the image and the mask in a
   later processing step.
 

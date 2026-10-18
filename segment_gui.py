@@ -14,6 +14,8 @@ Features
   * Paint (left drag) / erase (right drag), clear, erode, dilate.
   * Rotate / flip the view; the flip/rotation is recorded to the CSV, while the
     saved mask always stays aligned with the image on disk.
+  * Zoom with the mouse wheel or +/- and pan with the middle mouse button or
+    Ctrl+left-drag. The view transform never changes the saved mask.
   * Masks are saved as 0/1 PNGs at the image's native resolution.
 
 Usage
@@ -24,6 +26,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import math
 from collections import OrderedDict
 from pathlib import Path
 import tkinter as tk
@@ -54,6 +57,12 @@ MIN_BRUSH = 2
 MAX_BRUSH = 120
 UNDO_LIMIT = 30
 TOOLS = ("draw", "erase", "fill")
+ZOOM_STEP = 1.25         # one wheel notch / key press
+MIN_ZOOM = 0.25          # relative to the fit-to-window scale
+MAX_ZOOM = 8.0
+MAX_VIEW_PIXELS = 12_000_000  # cap the rendered image so PhotoImage stays small
+SHIFT_MASK = 0x0001
+CONTROL_MASK = 0x0004
 
 try:  # Pillow >= 9.1 moved the resampling filters onto Image.Resampling.
     NEAREST = Image.Resampling.NEAREST
@@ -169,7 +178,13 @@ class SegmentGui(tk.Tk):
         self.disp_index: np.ndarray | None = None
         self.disp_shape: tuple[int, int] = (0, 0)
         self.display_scale = 1.0
-        self.display_offset: tuple[int, int] = (0, 0)
+        self.display_offset: tuple[float, float] = (0.0, 0.0)
+        self.zoom = 1.0
+        self.pan_x = 0.0
+        self.pan_y = 0.0
+        self.panning = False
+        self.pan_last: tuple[int, int] | None = None
+        self.last_mouse: tuple[int, int] | None = None
         self.bg_photo: ImageTk.PhotoImage | None = None
         self.ov_photo: ImageTk.PhotoImage | None = None
         self.bg_id: int | None = None
@@ -358,11 +373,19 @@ class SegmentGui(tk.Tk):
         self.canvas.bind("<ButtonPress-3>", lambda e: self.on_press(e, right=True))
         self.canvas.bind("<B3-Motion>", lambda e: self.on_drag(e, right=True))
         self.canvas.bind("<ButtonRelease-3>", self.end_stroke)
+        self.canvas.bind("<ButtonPress-2>", self.start_pan)
+        self.canvas.bind("<B2-Motion>", self.pan_drag)
+        self.canvas.bind("<ButtonRelease-2>", self.end_pan)
+        self.canvas.bind("<Control-ButtonPress-1>", self.start_pan)
+        self.canvas.bind("<Control-B1-Motion>", self.pan_drag)
+        self.canvas.bind("<Control-ButtonRelease-1>", self.end_pan)
         self.canvas.bind("<Motion>", self.on_motion)
         self.canvas.bind("<Leave>", self.on_leave)
         self.canvas.bind("<MouseWheel>", self.on_wheel)
-        self.canvas.bind("<Button-4>", lambda e: self.change_brush(2))
-        self.canvas.bind("<Button-5>", lambda e: self.change_brush(-2))
+        self.canvas.bind("<Button-4>", lambda e: self.zoom_at(e.x, e.y, ZOOM_STEP))
+        self.canvas.bind("<Button-5>", lambda e: self.zoom_at(e.x, e.y, 1.0 / ZOOM_STEP))
+        self.canvas.bind("<Shift-Button-4>", lambda e: self.change_brush(2))
+        self.canvas.bind("<Shift-Button-5>", lambda e: self.change_brush(-2))
 
         statusbar = ttk.Frame(self, padding=(8, 4))
         statusbar.grid(row=3, column=0, sticky="ew")
@@ -374,9 +397,9 @@ class SegmentGui(tk.Tk):
 
         help_text = (
             "Enter: accept & next    Left/Right: section    t: Otsu    i: invert    "
-            "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase    "
-            "f: fill (left: fill, right: empty)    Ctrl+Z/u: undo    "
-            "c: clear    E/D: erode/dilate    [ ]: brush    s: save    Esc/q: quit    "
+            "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase\n"
+            "f: fill    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    s: save    "
+            "Wheel: zoom    Shift+Wheel: brush    +/-: zoom    0: fit    Middle/Ctrl-drag: pan    Esc/q: quit\n"
             "(moving the threshold replaces hand edits)"
         )
         ttk.Label(self, text=help_text, padding=(8, 2)).grid(row=4, column=0, sticky="w")
@@ -437,6 +460,12 @@ class SegmentGui(tk.Tk):
         self.undo_stack.clear()
         self.last_action = None
         self.disp_index = None
+        self.zoom = 1.0
+        self.pan_x = 0.0
+        self.pan_y = 0.0
+        self.panning = False
+        self.pan_last = None
+        self.canvas.configure(cursor="crosshair" if self.tool == "fill" else "")
         self.render_all()
 
     # --- threshold ---------------------------------------------------------- #
@@ -483,6 +512,24 @@ class SegmentGui(tk.Tk):
         self.render_overlay()
         self.update_status()
 
+    def canvas_size(self) -> tuple[int, int]:
+        return max(self.canvas.winfo_width(), 100), max(self.canvas.winfo_height(), 100)
+
+    @staticmethod
+    def clamp_pan(pan: float, canvas: int, image: int) -> float:
+        """Keep the image on screen; centre it when it is smaller than the canvas."""
+        if image <= canvas:
+            return 0.0
+        limit = (image - canvas) / 2.0
+        return max(-limit, min(limit, pan))
+
+    def max_zoom(self, disp_w: int, disp_h: int) -> float:
+        """Largest zoom relative to fit that respects MAX_VIEW_PIXELS."""
+        canvas_w, canvas_h = self.canvas_size()
+        fit = max(min(canvas_w / disp_w, canvas_h / disp_h), 1e-3)
+        pixel_limit = math.sqrt(MAX_VIEW_PIXELS / max(disp_w * disp_h, 1)) / fit
+        return max(MIN_ZOOM, min(MAX_ZOOM, max(1.0, pixel_limit)))
+
     def render_background(self) -> None:
         if self.base_img is None or self.base_index is None:
             return
@@ -491,14 +538,18 @@ class SegmentGui(tk.Tk):
         disp_h, disp_w = disp_img.shape
         self.disp_shape = (disp_h, disp_w)
 
-        canvas_w = max(self.canvas.winfo_width(), 100)
-        canvas_h = max(self.canvas.winfo_height(), 100)
-        scale = max(min(canvas_w / disp_w, canvas_h / disp_h), 1e-3)
+        canvas_w, canvas_h = self.canvas_size()
+        fit_scale = max(min(canvas_w / disp_w, canvas_h / disp_h), 1e-3)
+        self.zoom = max(MIN_ZOOM, min(self.zoom, self.max_zoom(disp_w, disp_h)))
+        scale = fit_scale * self.zoom
         out_w = max(1, int(disp_w * scale))
         out_h = max(1, int(disp_h * scale))
         self.display_scale = scale
-        offset_x = (canvas_w - out_w) // 2
-        offset_y = (canvas_h - out_h) // 2
+
+        self.pan_x = self.clamp_pan(self.pan_x, canvas_w, out_w)
+        self.pan_y = self.clamp_pan(self.pan_y, canvas_h, out_h)
+        offset_x = (canvas_w - out_w) / 2.0 + self.pan_x
+        offset_y = (canvas_h - out_h) / 2.0 + self.pan_y
         self.display_offset = (offset_x, offset_y)
 
         disp_img = self.apply_contrast(disp_img)
@@ -567,6 +618,49 @@ class SegmentGui(tk.Tk):
         self.min_scale.set(0)
         self.max_scale.set(255)
 
+    # --- zoom / pan --------------------------------------------------------- #
+    def zoom_at(self, x: float, y: float, factor: float) -> None:
+        """Zoom by ``factor`` while keeping the image point under (x, y) fixed."""
+        if self.base_img is None or self.display_scale <= 0:
+            return
+        disp_h, disp_w = self.disp_shape
+        if disp_w <= 0 or disp_h <= 0:
+            return
+        new_zoom = max(MIN_ZOOM, min(self.max_zoom(disp_w, disp_h), self.zoom * factor))
+        if abs(new_zoom - self.zoom) < 1e-9:
+            return
+
+        old_scale = self.display_scale
+        old_x, old_y = self.display_offset
+        image_x = (x - old_x) / old_scale
+        image_y = (y - old_y) / old_scale
+
+        self.zoom = new_zoom
+        canvas_w, canvas_h = self.canvas_size()
+        fit_scale = max(min(canvas_w / disp_w, canvas_h / disp_h), 1e-3)
+        new_scale = fit_scale * new_zoom
+        out_w = max(1, int(disp_w * new_scale))
+        out_h = max(1, int(disp_h * new_scale))
+        self.pan_x = x - image_x * new_scale - (canvas_w - out_w) / 2.0
+        self.pan_y = y - image_y * new_scale - (canvas_h - out_h) / 2.0
+        self.pan_x = self.clamp_pan(self.pan_x, canvas_w, out_w)
+        self.pan_y = self.clamp_pan(self.pan_y, canvas_h, out_h)
+        self.render_all()
+
+    def zoom_center(self, factor: float) -> None:
+        if self.last_mouse is not None:
+            x, y = self.last_mouse
+        else:
+            canvas_w, canvas_h = self.canvas_size()
+            x, y = canvas_w / 2.0, canvas_h / 2.0
+        self.zoom_at(x, y, factor)
+
+    def reset_view(self) -> None:
+        self.zoom = 1.0
+        self.pan_x = 0.0
+        self.pan_y = 0.0
+        self.render_all()
+
     # --- painting ----------------------------------------------------------- #
     def canvas_to_base(self, event_x: int, event_y: int) -> tuple[int, int] | None:
         if self.disp_index is None or self.base_img is None:
@@ -591,8 +685,62 @@ class SegmentGui(tk.Tk):
         for row, col in ((r0, c0), (r1, c1)):
             draw.ellipse([col - radius, row - radius, col + radius, row + radius], fill=value)
 
+    def start_pan(self, event: tk.Event) -> None:
+        self.canvas.focus_set()
+        self.panning = True
+        self.pan_last = (event.x, event.y)
+        self.last_pt = None
+        self.stroke_pushed = False
+        self.on_leave(None)
+        self.canvas.configure(cursor="fleur")
+
+    def pan_drag(self, event: tk.Event) -> None:
+        if not self.panning or self.pan_last is None:
+            return
+        dx = event.x - self.pan_last[0]
+        dy = event.y - self.pan_last[1]
+        self.pan_last = (event.x, event.y)
+        self.last_mouse = (event.x, event.y)
+        if not dx and not dy:
+            return
+
+        canvas_w, canvas_h = self.canvas_size()
+        disp_h, disp_w = self.disp_shape
+        out_w = max(1, int(disp_w * self.display_scale))
+        out_h = max(1, int(disp_h * self.display_scale))
+        new_x = self.clamp_pan(self.pan_x + dx, canvas_w, out_w)
+        new_y = self.clamp_pan(self.pan_y + dy, canvas_h, out_h)
+        move_x = new_x - self.pan_x
+        move_y = new_y - self.pan_y
+        if not move_x and not move_y:
+            return
+
+        # Moving the existing canvas items is much cheaper than re-rendering
+        # the full background and overlay on every drag event.
+        self.pan_x, self.pan_y = new_x, new_y
+        self.display_offset = (
+            self.display_offset[0] + move_x,
+            self.display_offset[1] + move_y,
+        )
+        if self.bg_id is not None:
+            self.canvas.move(self.bg_id, move_x, move_y)
+        if self.ov_id is not None:
+            self.canvas.move(self.ov_id, move_x, move_y)
+
+    def end_pan(self, _event: tk.Event | None = None) -> None:
+        if not self.panning:
+            return
+        self.panning = False
+        self.pan_last = None
+        self.canvas.configure(cursor="crosshair" if self.tool == "fill" else "")
+        if self.last_mouse is not None and self.tool != "fill":
+            self.update_cursor(self.last_mouse[0], self.last_mouse[1], self.tool == "erase")
+
     def on_press(self, event: tk.Event, right: bool) -> None:
         self.canvas.focus_set()
+        if event.state & CONTROL_MASK:
+            self.start_pan(event)
+            return
         if self.tool == "fill":
             self.bucket_fill(event, 0 if right else 255)
             return
@@ -601,6 +749,12 @@ class SegmentGui(tk.Tk):
         self.continue_stroke(event, right or self.tool == "erase")
 
     def on_drag(self, event: tk.Event, right: bool) -> None:
+        if self.panning:
+            self.pan_drag(event)
+            return
+        if event.state & CONTROL_MASK:
+            self.start_pan(event)
+            return
         if self.tool != "fill":
             self.continue_stroke(event, right or self.tool == "erase")
 
@@ -622,7 +776,10 @@ class SegmentGui(tk.Tk):
         self.mask_dirty = True
         self.render_overlay()
 
-    def end_stroke(self, _event: tk.Event) -> None:
+    def end_stroke(self, _event: tk.Event | None = None) -> None:
+        if self.panning:
+            self.end_pan(_event)
+            return
         self.last_pt = None
         if self.mask_dirty:
             self.mask_source = "edited"
@@ -748,16 +905,25 @@ class SegmentGui(tk.Tk):
         self.canvas.tag_raise(self.cursor_id)
 
     def on_motion(self, event: tk.Event) -> None:
+        self.last_mouse = (event.x, event.y)
+        if self.panning:
+            return
         if self.tool != "fill":
             self.update_cursor(event.x, event.y, self.tool == "erase")
 
     def on_leave(self, _event: tk.Event | None) -> None:
+        self.last_mouse = None
         if self.cursor_id is not None:
             self.canvas.delete(self.cursor_id)
             self.cursor_id = None
 
     def on_wheel(self, event: tk.Event) -> None:
-        self.change_brush(2 if event.delta > 0 else -2)
+        if event.state & SHIFT_MASK:
+            self.change_brush(2 if event.delta > 0 else -2)
+            return
+        if event.delta == 0:
+            return
+        self.zoom_at(event.x, event.y, ZOOM_STEP if event.delta > 0 else 1.0 / ZOOM_STEP)
 
     # --- navigation / keys -------------------------------------------------- #
     def move(self, delta: int) -> None:
@@ -794,6 +960,12 @@ class SegmentGui(tk.Tk):
             self.move(-1)
         elif key in ("Right", "Down"):
             self.move(1)
+        elif key in ("plus", "KP_Add", "equal") or char in ("+", "="):
+            self.zoom_center(ZOOM_STEP)
+        elif key in ("minus", "KP_Subtract") or char == "-":
+            self.zoom_center(1.0 / ZOOM_STEP)
+        elif key in ("0", "KP_0") or char == "0":
+            self.reset_view()
         elif key == "E":
             self.erode_mask()
         elif key == "D":
@@ -898,6 +1070,7 @@ class SegmentGui(tk.Tk):
         self.mask_src_var.set(f"mask: {self.mask_source}")
         self.state_var.set(
             f"flip: {flip_display}    rotation: {self.rotation} x 90 ({self.rotation * 90:+d} deg)"
+            f"    zoom: {self.zoom:.2f}x"
         )
         if self.seg_path(self.index).exists():
             self.done_var.set("\u25cf segmented")
