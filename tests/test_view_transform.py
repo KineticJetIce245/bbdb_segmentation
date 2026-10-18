@@ -602,6 +602,53 @@ class SegmentGuiViewTests(unittest.TestCase):
         ):
             self.assertIn(handler, self.app.canvas.bind(sequence))
 
+    def test_threshold_brush_changes_only_its_disk(self) -> None:
+        self.app.base_mask_img = Image.fromarray(
+            np.zeros((60, 80), dtype=np.uint8)
+        )
+        self.app.set_threshold_range(0, 255)
+        self.app.invert_var.set(False)
+        self.app.set_tool("threshold")
+
+        x, y = self.center()
+        self.app.on_press(make_event(x, y), right=False)
+        self.assertTrue(self.app.threshold_stroke_active)
+        self.assertIsNotNone(self.app.brush_overlay_id)
+        self.app.on_drag(make_event(x + 10, y), right=False)
+        self.app.end_stroke(make_event(x + 10, y))
+
+        self.assertFalse(self.app.threshold_stroke_active)
+        self.assertIsNone(self.app.brush_overlay_id)
+        after = np.asarray(self.app.base_mask_img)
+        self.assertGreater(int(np.count_nonzero(after)), 0)
+        self.assertEqual(after[0, 0], 0)
+        self.assertEqual(after[-1, -1], 0)
+
+        record = json.loads(self.app.ops_path(self.app.index).read_text().splitlines()[-1])
+        self.assertEqual(record["op"], "threshold_brush")
+        self.assertGreater(record["added"], 0)
+
+    def test_threshold_brush_respects_active_roi(self) -> None:
+        self.app.base_mask_img = Image.fromarray(
+            np.zeros((60, 80), dtype=np.uint8)
+        )
+        self.app.create_roi(0, 0, 10, 10)
+        self.app.set_threshold_range(0, 255)
+        self.app.set_tool("threshold")
+        before = np.asarray(self.app.base_mask_img).copy()
+
+        x, y = self.center()
+        self.app.on_press(make_event(x, y), right=False)
+        self.app.end_stroke(make_event(x, y))
+
+        np.testing.assert_array_equal(before, np.asarray(self.app.base_mask_img))
+
+    def test_l_key_toggles_threshold_brush(self) -> None:
+        self.app.on_key(make_event(keysym="l", char="l"))
+        self.assertEqual(self.app.tool, "threshold")
+        self.app.on_key(make_event(keysym="l", char="l"))
+        self.assertEqual(self.app.tool, "draw")
+
     def test_review_finished_checkbox_rebuilds_queue(self) -> None:
         # Add a second pending section to the in-memory records.
         extra = self.app.records.iloc[0].copy()

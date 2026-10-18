@@ -39,6 +39,7 @@ import numpy as np
 from PIL import Image
 
 from .session import IOMixin
+from .threshold_brush import ThresholdBrushMixin
 from .lasso import LassoMixin
 from .painting import PaintMixin
 from .work_queue import QueueMixin
@@ -56,7 +57,7 @@ from .settings import (
 )
 
 
-class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, PaintMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
+class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, PaintMixin, ThresholdBrushMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
     def __init__(
         self,
         csv_path: Path | None,
@@ -125,6 +126,9 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, Pain
         self.stroke_before: np.ndarray | None = None
         self.stroke_op = "draw"
         self.stroke_roi_id: int | None = None
+        self.threshold_stroke_active = False
+        self.threshold_stroke_values: np.ndarray | None = None
+        self.threshold_stroke_roi_mask: np.ndarray | None = None
         self.threshold_pending = False
         self.alpha_pending = False
         self.contrast_pending = False
@@ -148,8 +152,10 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, Pain
         self.last_mouse: tuple[int, int] | None = None
         self.bg_photo: ImageTk.PhotoImage | None = None
         self.ov_photo: ImageTk.PhotoImage | None = None
+        self.brush_overlay_photo: ImageTk.PhotoImage | None = None
         self.bg_id: int | None = None
         self.ov_id: int | None = None
+        self.brush_overlay_id: int | None = None
         self.cursor_id: int | None = None
         self.resize_after_id: str | None = None
         self.pending_save_id: str | None = None
@@ -216,6 +222,8 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, Pain
             self.toggle_erase()
         elif char == "f":
             self.toggle_fill()
+        elif char == "l":
+            self.toggle_threshold_brush()
         elif char == "u":
             self.undo()
         elif char == "s":

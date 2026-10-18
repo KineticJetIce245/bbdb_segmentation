@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import tkinter as tk
 
+from PIL import Image, ImageDraw, ImageTk
+
 from .settings import MAX_BRUSH, MIN_BRUSH, SHIFT_MASK, TOOLS, ZOOM_STEP
 
 
@@ -39,7 +41,10 @@ class ToolsMixin:
     def set_tool(self, tool: str) -> None:
         self.tool = tool
         self.update_mode_label()
-        self.canvas.configure(cursor="crosshair" if tool == "fill" else "")
+        self.canvas.configure(cursor="crosshair" if tool in ("fill", "threshold") else "")
+        if tool != "threshold":
+            self.threshold_stroke_active = False
+            self.clear_brush_overlay()
         if tool == "fill":
             self.on_leave(None)
 
@@ -52,6 +57,9 @@ class ToolsMixin:
     def toggle_fill(self) -> None:
         self.set_tool("draw" if self.tool == "fill" else "fill")
 
+    def toggle_threshold_brush(self) -> None:
+        self.set_tool("draw" if self.tool == "threshold" else "threshold")
+
     def update_brush_label(self) -> None:
         self.brush_var.set(f"brush: {self.brush}px")
         self.brush_input_var.set(str(self.brush))
@@ -61,7 +69,10 @@ class ToolsMixin:
 
     def update_cursor(self, x: int, y: int, erase: bool) -> None:
         radius = self.brush
-        colour = "#ff4040" if erase else "#ffff40"
+        if self.tool == "threshold":
+            colour = "#00b7ff"
+        else:
+            colour = "#ff4040" if erase else "#ffff40"
         if self.cursor_id is None:
             self.cursor_id = self.canvas.create_oval(0, 0, 0, 0, outline=colour, width=2)
         self.canvas.coords(self.cursor_id, x - radius, y - radius, x + radius, y + radius)
@@ -77,9 +88,42 @@ class ToolsMixin:
 
     def on_leave(self, _event: tk.Event | None) -> None:
         self.last_mouse = None
+        self.clear_brush_overlay()
         if self.cursor_id is not None:
             self.canvas.delete(self.cursor_id)
             self.cursor_id = None
+
+    def show_brush_overlay(self, x: int, y: int) -> None:
+        radius = max(1, int(self.brush))
+        size = radius * 2 + 1
+        overlay = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        draw.ellipse(
+            (1, 1, size - 2, size - 2),
+            fill=(0, 150, 255, 80),
+            outline=(0, 205, 255, 230),
+            width=2,
+        )
+        self.brush_overlay_photo = ImageTk.PhotoImage(overlay)
+        if self.brush_overlay_id is None:
+            self.brush_overlay_id = self.canvas.create_image(
+                x, y, anchor="center", image=self.brush_overlay_photo
+            )
+        else:
+            self.canvas.itemconfigure(self.brush_overlay_id, image=self.brush_overlay_photo)
+            self.canvas.coords(self.brush_overlay_id, x, y)
+        self.canvas.tag_raise(self.brush_overlay_id)
+        if self.cursor_id is not None:
+            self.canvas.tag_raise(self.cursor_id)
+
+    def clear_brush_overlay(self) -> None:
+        if self.brush_overlay_id is not None:
+            try:
+                self.canvas.delete(self.brush_overlay_id)
+            except tk.TclError:
+                pass
+            self.brush_overlay_id = None
+        self.brush_overlay_photo = None
 
     def on_wheel(self, event: tk.Event) -> None:
         if event.state & SHIFT_MASK:

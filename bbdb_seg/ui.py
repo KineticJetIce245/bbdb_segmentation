@@ -39,6 +39,7 @@ class UiMixin:
         self.mode_button = ttk.Button(toolbar, text="Mode: Draw", width=12, command=self.cycle_tool)
         self.mode_button.pack(side="left")
         ttk.Button(toolbar, text="Fill (f)", command=lambda: self.set_tool("fill")).pack(side="left", padx=(2, 0))
+        ttk.Button(toolbar, text="Threshold (L)", command=lambda: self.set_tool("threshold")).pack(side="left", padx=(2, 0))
         ttk.Button(toolbar, text="Undo (Ctrl+Z)", command=self.undo).pack(side="left", padx=(2, 0))
         ttk.Button(toolbar, text="Clear mask", command=self.clear_mask).pack(side="left", padx=(2, 10))
 
@@ -169,7 +170,7 @@ class UiMixin:
         help_text = (
             "Enter: accept & next    Left/Right: section    t: Otsu    i: invert    "
             "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase\n"
-            "f: fill    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    brush box: type px    s: save    "
+            "f: fill    L: threshold brush    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    brush box: type px    s: save    "
             "Wheel: zoom    Shift+Wheel: brush    +/-: zoom    0: fit    Middle/Ctrl-drag: pan    Esc/q: quit\n"
             "Shift+left-drag: rectangle ROI    Shift+right-drag: lasso ROI    Shift-click: activate/clear ROI    Backspace/Delete: delete ROI\n"
             "(moving the threshold sliders replaces hand edits)"

@@ -60,8 +60,12 @@ class IOMixin:
         self.lasso_dragging = False
         self.lasso_points = []
         self.lasso_moved = False
+        self.threshold_stroke_active = False
+        self.threshold_stroke_values = None
+        self.threshold_stroke_roi_mask = None
         self.stroke_before = None
         self.clear_roi_items()
+        self.clear_brush_overlay()
 
     def _set_initial_threshold_band(self, base_img: np.ndarray) -> None:
         self.otsu = otsu_threshold(base_img)
