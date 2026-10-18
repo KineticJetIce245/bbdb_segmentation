@@ -41,6 +41,7 @@ import numpy as np
 from PIL import Image
 
 from .session import IOMixin
+from .status import StatusMixin
 from .brush_erase import BrushEraseMixin
 from .brush_select import BrushSelectMixin
 from .lasso import LassoMixin
@@ -60,13 +61,12 @@ from .settings import (
 )
 
 
-class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, PaintMixin, BrushSelectMixin, BrushEraseMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
+class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, LassoMixin, PaintMixin, BrushSelectMixin, BrushEraseMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
     def __init__(
         self,
         csv_path: Path | None,
         data_root_override: str | None = None,
         seg_root_override: str | None = None,
-        review_all: bool = False,
     ) -> None:
         super().__init__()
         self.title(APP_TITLE)
@@ -74,8 +74,7 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, Pain
         self.aborted = False
 
         self.seg_root = Path(seg_root_override).expanduser().resolve() if seg_root_override else REPO_ROOT
-        self.review_all = review_all
-        resolved = self.resolve_inputs(csv_path, data_root_override, review_all)
+        resolved = self.resolve_inputs(csv_path, data_root_override)
         if resolved is None:
             self.aborted = True
             return
@@ -138,6 +137,9 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, Pain
         self.ui_ready = False
         self.mask_dirty = False
         self.mask_source = ""
+        self.segmented_status = False
+        self.stop_auto_confirm = False
+        self.status_cache: dict[int, tuple[bool, bool]] = {}
         self.last_pt: tuple[int, int] | None = None
 
     def _init_brush_select_state(self) -> None:
@@ -187,7 +189,9 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, Pain
         self.done_var = tk.StringVar()
         self.otsu_var = tk.StringVar()
         self.invert_var = tk.BooleanVar(value=False)
-        self.review_finished_var = tk.BooleanVar(value=False)
+        self.segmented_var = tk.BooleanVar(value=False)
+        self.stop_auto_confirm_var = tk.BooleanVar(value=False)
+        self.queue_filter_var = tk.StringVar(value="all")
 
     def _init_window(self) -> None:
         self.geometry("1500x950")
@@ -261,14 +265,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--data-root", default=None, help="brain_biodiversity_bank folder containing v.1/ (auto-detected by default)")
     parser.add_argument("--seg-root", default=None, help="folder the CSV 'segmentation' paths are relative to (default: this folder)")
-    parser.add_argument("--all", action="store_true", help="open every image, not only those without a segmentation")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     csv_path = Path(args.csv).expanduser().resolve() if args.csv else None
-    app = SegmentGui(csv_path, args.data_root, args.seg_root, args.all)
+    app = SegmentGui(csv_path, args.data_root, args.seg_root)
     if app.aborted:
         app.destroy()
         return

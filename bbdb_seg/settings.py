@@ -6,6 +6,7 @@ WORK_MAX = 1600          # longest side of the in-memory working image
 OVERLAY_ALPHA = 110      # 0..255 opacity of the red overlay
 MAX_CACHE_ITEMS = 4
 SAVE_DEBOUNCE_MS = 400
+MAX_LOG_RECORDS = 50
 DEFAULT_BRUSH = 14       # brush radius in on-screen pixels
 MIN_BRUSH = 2
 MAX_BRUSH = 120

@@ -18,7 +18,7 @@ from bbdb_seg.image_ops import (
     mask_diff,
     otsu_threshold,
 )
-from bbdb_seg.ops_log import append_operation, operations_path
+from bbdb_seg.ops_log import append_operation, operations_path, read_status
 from bbdb_seg.paths import find_data_root
 from bbdb_seg.roi import Roi, base_to_display, roi_at_point, roi_screen_points, roi_screen_rect
 from bbdb_seg.view_math import clamp_pan, fit_scale, max_zoom
@@ -101,6 +101,27 @@ class PathAndLogTests(unittest.TestCase):
     def test_find_data_root_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(find_data_root(tmp), Path(tmp).resolve())
+
+    def test_ops_log_compacts_and_keeps_latest_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            seg_path = Path(tmp) / "masks" / "one.png"
+            for index in range(55):
+                append_operation(
+                    seg_path,
+                    {
+                        "op": "draw",
+                        "added": 1,
+                        "segmented": index == 54,
+                        "stop_auto_confirm": False,
+                        "tag": "status" if index == 54 else None,
+                    },
+                )
+            lines = operations_path(seg_path).read_text().splitlines()
+            self.assertLessEqual(len(lines), 50)
+            first = json.loads(lines[0])
+            self.assertEqual(first["op"], "merged")
+            self.assertGreaterEqual(first["count"], 2)
+            self.assertEqual(read_status(seg_path), (True, False))
 
     def test_ops_log_appends_json_lines(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

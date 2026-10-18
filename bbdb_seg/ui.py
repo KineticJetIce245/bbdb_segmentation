@@ -71,6 +71,14 @@ class UiMixin:
         ttk.Button(row, text="Accept & next (Enter)", command=self.accept_and_next).pack(side="left")
         self.done_label = tk.Label(row, textvariable=self.done_var, font=("TkDefaultFont", 10, "bold"))
         self.done_label.pack(side="left", padx=(8, 8))
+        ttk.Checkbutton(
+            row, text="Segmented", variable=self.segmented_var,
+            command=self.on_segmented_toggle, takefocus=False,
+        ).pack(side="left", padx=(0, 6))
+        ttk.Checkbutton(
+            row, text="Stop auto confirm", variable=self.stop_auto_confirm_var,
+            command=self.on_stop_auto_confirm_toggle, takefocus=False,
+        ).pack(side="left", padx=(0, 8))
         ttk.Label(row, textvariable=self.status_var).pack(side="right")
 
     def _build_controls(self, controls: ttk.Frame) -> None:
@@ -123,14 +131,14 @@ class UiMixin:
         self.max_scale.pack(side="left", padx=(0, 8))
         ttk.Button(row, text="Auto", command=self.auto_contrast).pack(side="left", padx=(4, 4))
         ttk.Button(row, text="Reset", command=self.reset_contrast).pack(side="left")
-        self.review_finished_check = ttk.Checkbutton(
-            row, text="Review finished",
-            variable=self.review_finished_var,
-            command=self.on_review_finished_change,
-            takefocus=False,
+        ttk.Label(row, text="Queue:").pack(side="left", padx=(10, 2))
+        self.queue_menu = ttk.Combobox(
+            row, textvariable=self.queue_filter_var,
+            values=("not segmented", "segmented", "all"),
+            state="readonly", width=16,
         )
-        self.review_finished_check.pack(side="left", padx=(10, 0))
-        self.review_finished_var.set(self.review_all)
+        self.queue_menu.pack(side="left")
+        self.queue_menu.bind("<<ComboboxSelected>>", self.on_queue_filter_change)
         self.alpha_scale.set(self.overlay_alpha)
         self.min_scale.set(self.contrast_min)
         self.max_scale.set(self.contrast_max)
