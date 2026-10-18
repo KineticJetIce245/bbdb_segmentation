@@ -18,15 +18,10 @@ class PaintMixin:
         if self.base_mask_img is None:
             return
         radius = max(1, int(round(self.brush / max(self.display_scale, 1e-6))))
-        targets = [(self.base_mask_img, value)]
-        footprint = getattr(self, "stroke_footprint", None)
-        if footprint is not None:
-            targets.append((footprint, 255))   # everything the brush touched
-        for image, fill in targets:
-            draw = ImageDraw.Draw(image)
-            draw.line([(c0, r0), (c1, r1)], fill=fill, width=2 * radius)
-            for row, col in ((r0, c0), (r1, c1)):
-                draw.ellipse([col - radius, row - radius, col + radius, row + radius], fill=fill)
+        draw = ImageDraw.Draw(self.base_mask_img)
+        draw.line([(c0, r0), (c1, r1)], fill=value, width=2 * radius)
+        for row, col in ((r0, c0), (r1, c1)):
+            draw.ellipse([col - radius, row - radius, col + radius, row + radius], fill=value)
 
     def on_press(self, event: tk.Event, right: bool) -> None:
         self.flush_slider_updates()
@@ -50,10 +45,8 @@ class PaintMixin:
                 self.start_brush_select(event)
             return
         self.last_pt = None
-        self.reset_smoothing()
         self.stroke_pushed = False
         self.stroke_before = np.asarray(self.base_mask_img).copy()
-        self.stroke_footprint = Image.new("L", self.base_mask_img.size, 0)
         self.stroke_op = "erase" if (right or self.tool == "erase") else "draw"
         self.stroke_roi_id = self.active_roi_id
         self.continue_stroke(event, right or self.tool == "erase")
@@ -87,28 +80,27 @@ class PaintMixin:
             self.continue_stroke(event, right or self.tool == "erase")
 
     def continue_stroke(self, event: tk.Event, erase: bool) -> None:
-        # The cursor ring follows the raw pointer; the stroke follows the
-        # (lag-free, speed-adaptive) smoothed position.
+        point = self.canvas_to_base(event.x, event.y)
         self.update_cursor(event.x, event.y, erase)
-        sx, sy = self.smooth_screen(event.x, event.y, getattr(event, "time", None))
-        point = self.canvas_to_base(int(round(sx)), int(round(sy)))
         if point is None:
             self.last_pt = None
-            self.preview_last = None
             return
         if not self.stroke_pushed:
             self.push_undo("stroke")
             self.stroke_pushed = True
         value = 0 if erase else 255
-        if self.last_pt is None:
+        first_point = self.last_pt is None
+        if first_point:
             self.stamp(point[0], point[1], point[0], point[1], value)
         else:
             self.stamp(self.last_pt[0], self.last_pt[1], point[0], point[1], value)
         self.last_pt = point
         self.mask_dirty = True
-        # Instant feedback: vector preview on the canvas; the raster overlay is
-        # rendered once when the stroke ends.
-        self.draw_stroke_preview(sx, sy, erase)
+        if first_point:
+            # Show the initial dab immediately; coalesce the rest of the drag.
+            self.render_overlay()
+        else:
+            self.schedule_slider_update("overlay")
 
     def end_stroke(self, _event: tk.Event | None = None) -> None:
         if self.brush_erase_dragging:
@@ -131,30 +123,11 @@ class PaintMixin:
             self.end_pan(_event)
             return
         self.flush_slider_updates()
-        raw_screen = getattr(self, "smooth_raw_screen", None)
-        raw_end = self.canvas_to_base(*raw_screen) if raw_screen is not None else None
-        if self.last_pt is not None and raw_end is not None and raw_end != self.last_pt:
-            # finish the smoothed line where the pointer actually stopped
-            value = 0 if self.stroke_op == "erase" else 255
-            self.stamp(self.last_pt[0], self.last_pt[1], raw_end[0], raw_end[1], value)
         self.last_pt = None
-        self.clear_stroke_preview()
-        self.reset_smoothing()
         before = self.stroke_before
         self.stroke_before = None
         if before is not None:
-            if self.stroke_op == "draw":
-                painted = np.asarray(self.base_mask_img)
-                kept = self.exclude_background(painted, strict=True)
-                if not np.array_equal(kept, painted):
-                    self.base_mask_img = Image.fromarray(kept)
-            self.render_overlay()   # one raster render per stroke
             after = np.asarray(self.base_mask_img)
-            footprint = getattr(self, "stroke_footprint", None)
-            self.record_hand_edit(
-                before, after, self.stroke_op,
-                footprint=np.asarray(footprint) > 0 if footprint is not None else None,
-            )
             added, removed, bbox = diff_masks(before, after)
             if bbox is not None:
                 roi = next(
@@ -168,7 +141,6 @@ class PaintMixin:
                     removed=removed,
                     bbox=bbox,
                 )
-        self.stroke_footprint = None
         self.stroke_roi_id = None
         if self.mask_dirty:
             self.mask_source = "edited"
@@ -187,9 +159,6 @@ class PaintMixin:
         self.push_undo("fill")
         before = mask.copy()
         mask[labels == labels[row, col]] = value
-        if value:
-            mask = self.exclude_background(mask, strict=True)
-        self.record_hand_edit(before, mask, "draw" if value else "erase")
         self.base_mask_img = Image.fromarray(mask)
         added, removed, bbox = diff_masks(before, mask)
         if bbox is not None:
@@ -218,7 +187,6 @@ class PaintMixin:
             return
         before = np.asarray(self.base_mask_img).copy()
         self.base_mask_img = self.undo_stack.pop()
-        self.on_mask_restored()
         added, removed, bbox = diff_masks(before, np.asarray(self.base_mask_img))
         if bbox is not None:
             self.log_op(
@@ -244,7 +212,6 @@ class PaintMixin:
         before = np.asarray(self.base_mask_img).copy()
         self.push_undo("clear")
         self.base_mask_img.paste(0, (0, 0, self.base_mask_img.width, self.base_mask_img.height))
-        self.reset_hand_edits()
         added, removed, bbox = diff_masks(before, np.asarray(self.base_mask_img))
         if bbox is not None:
             self.log_op(

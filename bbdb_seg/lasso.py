@@ -63,7 +63,7 @@ class LassoMixin:
         if len(base_points) < 3:
             self._handle_roi_click(event.x, event.y)
             return
-        self.create_polygon_roi(self.smooth_outline(base_points))
+        self.create_polygon_roi(base_points)
 
     def create_polygon_roi(self, points: list[tuple[int, int]]) -> None:
         self.flush_slider_updates()
