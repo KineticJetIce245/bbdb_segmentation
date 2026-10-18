@@ -181,16 +181,24 @@ class HandEditTests(unittest.TestCase):
 
 
 class SmoothingTests(unittest.TestCase):
-    def test_stabiliser_lags_and_can_be_disabled(self) -> None:
+    def test_one_euro_smooths_jitter_but_not_fast_moves(self) -> None:
         class S(StrokeSmoothMixin):
             smooth_var = _Var(True)
+        rng = np.random.default_rng(0)
+        # slow, jittery hold around x=100: output varies much less than input
         s = S(); s.reset_smoothing()
-        self.assertEqual(s.smooth_point((0, 0)), (0, 0))
-        r, c = s.smooth_point((0, 100))
-        self.assertTrue(0 < c < 100)                  # follows, but lags the pointer
-        s.smooth_var = _Var(False); s.reset_smoothing()
-        s.smooth_point((0, 0))
-        self.assertEqual(s.smooth_point((0, 100)), (0, 100))
+        xs = [s.smooth_screen(int(100 + rng.integers(-3, 4)), 50, t)[0] for t in range(0, 800, 8)]
+        self.assertLess(np.std(xs[20:]), 0.5 * 2.0)
+        # fast sweep (2000 px/s): smoothed position stays within a few px of the pointer
+        s = S(); s.reset_smoothing()
+        lags = []
+        for i, t in enumerate(range(0, 400, 8)):
+            x = 16 * i
+            lags.append(x - s.smooth_screen(x, 50, t)[0])
+        self.assertLess(max(lags[5:]), 12)
+        # disabled = raw pointer
+        s = S(); s.smooth_var = _Var(False); s.reset_smoothing()
+        self.assertEqual(s.smooth_screen(7, 9, 0), (7.0, 9.0))
 
     def test_chaikin_rounds_corners(self) -> None:
         square = [(0, 0), (0, 40), (40, 40), (40, 0)]

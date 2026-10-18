@@ -87,28 +87,28 @@ class PaintMixin:
             self.continue_stroke(event, right or self.tool == "erase")
 
     def continue_stroke(self, event: tk.Event, erase: bool) -> None:
-        point = self.canvas_to_base(event.x, event.y)
+        # The cursor ring follows the raw pointer; the stroke follows the
+        # (lag-free, speed-adaptive) smoothed position.
         self.update_cursor(event.x, event.y, erase)
+        sx, sy = self.smooth_screen(event.x, event.y, getattr(event, "time", None))
+        point = self.canvas_to_base(int(round(sx)), int(round(sy)))
         if point is None:
             self.last_pt = None
+            self.preview_last = None
             return
-        point = self.smooth_point(point)
         if not self.stroke_pushed:
             self.push_undo("stroke")
             self.stroke_pushed = True
         value = 0 if erase else 255
-        first_point = self.last_pt is None
-        if first_point:
+        if self.last_pt is None:
             self.stamp(point[0], point[1], point[0], point[1], value)
         else:
             self.stamp(self.last_pt[0], self.last_pt[1], point[0], point[1], value)
         self.last_pt = point
         self.mask_dirty = True
-        if first_point:
-            # Show the initial dab immediately; coalesce the rest of the drag.
-            self.render_overlay()
-        else:
-            self.schedule_slider_update("overlay")
+        # Instant feedback: vector preview on the canvas; the raster overlay is
+        # rendered once when the stroke ends.
+        self.draw_stroke_preview(sx, sy, erase)
 
     def end_stroke(self, _event: tk.Event | None = None) -> None:
         if self.brush_erase_dragging:
@@ -131,13 +131,14 @@ class PaintMixin:
             self.end_pan(_event)
             return
         self.flush_slider_updates()
-        raw_end = getattr(self, "smooth_raw_last", None)
+        raw_screen = getattr(self, "smooth_raw_screen", None)
+        raw_end = self.canvas_to_base(*raw_screen) if raw_screen is not None else None
         if self.last_pt is not None and raw_end is not None and raw_end != self.last_pt:
-            # the stabilised line lags the pointer; finish it where the pointer stopped
+            # finish the smoothed line where the pointer actually stopped
             value = 0 if self.stroke_op == "erase" else 255
             self.stamp(self.last_pt[0], self.last_pt[1], raw_end[0], raw_end[1], value)
-            self.render_overlay()
         self.last_pt = None
+        self.clear_stroke_preview()
         self.reset_smoothing()
         before = self.stroke_before
         self.stroke_before = None
@@ -147,7 +148,7 @@ class PaintMixin:
                 kept = self.exclude_background(painted, strict=True)
                 if not np.array_equal(kept, painted):
                     self.base_mask_img = Image.fromarray(kept)
-                    self.render_overlay()
+            self.render_overlay()   # one raster render per stroke
             after = np.asarray(self.base_mask_img)
             footprint = getattr(self, "stroke_footprint", None)
             self.record_hand_edit(
