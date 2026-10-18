@@ -8,13 +8,13 @@ from tkinter import messagebox
 import numpy as np
 from PIL import Image
 
-from common import normalize_flip, normalize_rotation
-from datasets import write_records
-from image_ops import NEAREST, bright_background, load_gray_work, load_mask_work, otsu_threshold
-from ops_log import append_operation, operations_path
-from paths import resolve_path
-from roi import Roi
-from settings import APP_TITLE, MAX_CACHE_ITEMS
+from .transforms import normalize_flip, normalize_rotation
+from .datasets import write_records
+from .image_ops import NEAREST, bright_background, load_gray_work, load_mask_work, otsu_threshold
+from .ops_log import append_operation, operations_path
+from .paths import resolve_path
+from .roi import Roi
+from .settings import APP_TITLE, MAX_CACHE_ITEMS
 
 class IOMixin:
 

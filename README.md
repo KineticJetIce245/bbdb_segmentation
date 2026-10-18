@@ -219,30 +219,34 @@ What this means for the threshold tool:
 ## Repository layout
 
 ```
-segment_gui.py              # entry point + SegmentGui controller composition
-gui_ui.py                   # Tk widget construction
-gui_io.py                   # image/mask loading, saving and status
-gui_queue.py                # CSV selection and work-queue refresh
-gui_threshold.py            # threshold range, Invert and slider coalescing
-gui_roi.py                  # ROI selection, activation and drawing
-gui_paint.py                # brush/fill/undo/morphology and transforms
-gui_tools.py                # brush size, tool mode and cursor
-gui_render.py               # canvas rendering, zoom and pan
-settings.py                 # shared defaults and constants
-paths.py                    # data-root discovery and path helpers
-datasets.py                 # group-CSV loading and queue helpers
-image_ops.py                # Otsu, threshold mask, contrast and mask diff
-roi.py                      # ROI model and base/display coordinate mapping
-view_math.py                # fit/zoom/pan calculations
-ops_log.py                  # append-only .ops.jsonl writer
-common.py                   # flip/rotation helpers
-make_segmentation_csvs.py   # builds csv/*.csv from sect_info.csv + the image folders
-sect_info.csv               # specimen / species / stain / section metadata for every image
-requirements.txt            # Python dependencies
-tests/                      # unittest suite
-csv/                        # one CSV per specimen_stain  (the GUI input; tracked in git)
-segmentations/              # saved masks and .ops.jsonl logs (tracked in git), one folder per specimen_stain
-docs/                       # figures used in this README
+bbdb_seg/                       # Python package (implementation)
+  app.py                        # SegmentGui composition + CLI
+  __main__.py                   # python -m bbdb_seg
+  ui.py                         # Tk widget construction
+  session.py                    # image/mask loading, saving and status
+  work_queue.py                 # CSV selection and work-queue refresh
+  threshold.py                  # threshold range, Invert, slider coalescing
+  selection.py                  # ROI selection, activation and drawing
+  painting.py                   # brush/fill/undo/morphology and transforms
+  tools.py                      # brush size, tool mode and cursor
+  rendering.py                  # canvas rendering, zoom and pan
+  settings.py                   # shared defaults and constants
+  paths.py                      # data-root discovery and path helpers
+  datasets.py                   # group-CSV loading and queue helpers
+  image_ops.py                  # Otsu, threshold mask, contrast and mask diff
+  roi.py                        # ROI model and base/display mapping
+  view_math.py                  # fit/zoom/pan calculations
+  ops_log.py                    # append-only .ops.jsonl writer
+  transforms.py                 # flip/rotation helpers
+  make_csvs.py                  # builds csv/*.csv from sect_info.csv + images
+segment_gui.py                  # compatibility entry point -> bbdb_seg.app
+make_segmentation_csvs.py       # compatibility entry point -> bbdb_seg.make_csvs
+sect_info.csv                   # specimen / species / stain / section metadata for every image
+requirements.txt                # Python dependencies
+tests/                          # unittest suite
+csv/                            # one CSV per specimen_stain  (the GUI input; tracked in git)
+segmentations/                  # saved masks and .ops.jsonl logs (tracked in git), one folder per specimen_stain
+docs/                           # figures used in this README
 ```
 
 The source images are **not** in this repository because they are too large.
@@ -383,7 +387,8 @@ python segment_gui.py csv\lion_nissl.csv
 ```
 
 If you run `python segment_gui.py` without a CSV, a file picker opens so you can
-choose one.
+choose one. The package can also be launched directly with
+`python -m bbdb_seg`.
 
 If every section in the CSV already has a mask, the GUI asks whether you want to
 review them anyway. To always open every section, use `--all` or tick

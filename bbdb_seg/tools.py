@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import tkinter as tk
 
-from settings import MAX_BRUSH, MIN_BRUSH, SHIFT_MASK, TOOLS, ZOOM_STEP
+from .settings import MAX_BRUSH, MIN_BRUSH, SHIFT_MASK, TOOLS, ZOOM_STEP
 
 
 class ToolsMixin:

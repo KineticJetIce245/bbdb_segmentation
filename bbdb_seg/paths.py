@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-TOOL_DIR = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def resolve_path(root_dir: Path, path_value: object) -> Path:
@@ -23,7 +23,7 @@ def rel_path(root_dir: Path, path: Path) -> str:
 def find_data_root(override: str | None = None) -> Path | None:
     if override:
         return Path(override).expanduser().resolve()
-    for parent in [TOOL_DIR, *TOOL_DIR.parents]:
+    for parent in [REPO_ROOT, *REPO_ROOT.parents]:
         for candidate in [
             parent,
             *sorted(parent.glob("brain_biodiversity_bank*")),

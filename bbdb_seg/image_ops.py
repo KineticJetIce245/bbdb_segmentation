@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from settings import WORK_MAX
+from .settings import WORK_MAX
 
 try:  # Pillow >= 9.1 moved the resampling filters onto Image.Resampling.
     NEAREST = Image.Resampling.NEAREST

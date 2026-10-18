@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from common import decode_flip
+from .transforms import decode_flip
 
 
 @dataclass

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 
-from settings import MAX_VIEW_PIXELS, MAX_ZOOM, MIN_ZOOM
+from .settings import MAX_VIEW_PIXELS, MAX_ZOOM, MIN_ZOOM
 
 
 def fit_scale(canvas_w: int, canvas_h: int, disp_w: int, disp_h: int) -> float:

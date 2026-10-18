@@ -9,19 +9,19 @@ import unittest
 import numpy as np
 from PIL import Image
 
-from common import apply_transform
-from datasets import pending_indices, read_records, write_records
-from image_ops import (
+from bbdb_seg.transforms import apply_transform
+from bbdb_seg.datasets import pending_indices, read_records, write_records
+from bbdb_seg.image_ops import (
     apply_contrast,
     bright_background,
     build_threshold_mask,
     mask_diff,
     otsu_threshold,
 )
-from ops_log import append_operation, operations_path
-from paths import find_data_root
-from roi import Roi, base_to_display, roi_at_point, roi_screen_rect
-from view_math import clamp_pan, fit_scale, max_zoom
+from bbdb_seg.ops_log import append_operation, operations_path
+from bbdb_seg.paths import find_data_root
+from bbdb_seg.roi import Roi, base_to_display, roi_at_point, roi_screen_rect
+from bbdb_seg.view_math import clamp_pan, fit_scale, max_zoom
 
 
 class ImageOpsTests(unittest.TestCase):

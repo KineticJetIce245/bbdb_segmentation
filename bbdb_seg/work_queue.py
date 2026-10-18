@@ -6,9 +6,9 @@ from tkinter import filedialog, messagebox
 
 import pandas as pd
 
-from datasets import pending_indices, read_records
-from paths import TOOL_DIR, find_data_root
-from settings import APP_TITLE
+from .datasets import pending_indices, read_records
+from .paths import REPO_ROOT, find_data_root
+from .settings import APP_TITLE
 
 
 class QueueMixin:
@@ -41,7 +41,7 @@ class QueueMixin:
             chosen = filedialog.askopenfilename(
                 parent=self,
                 title="Select a segmentation CSV",
-                initialdir=str(TOOL_DIR / "csv"),
+                initialdir=str(REPO_ROOT / "csv"),
                 filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
             )
             if not chosen:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 
-from roi import Roi, base_to_display, roi_at_point, roi_screen_rect
+from .roi import Roi, base_to_display, roi_at_point, roi_screen_rect
 
 class RoiMixin:
 

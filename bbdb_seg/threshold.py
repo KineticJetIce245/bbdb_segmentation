@@ -5,9 +5,9 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
-from image_ops import build_threshold_mask, mask_diff as diff_masks
-from roi import Roi
-from settings import SLIDER_UPDATE_MS
+from .image_ops import build_threshold_mask, mask_diff as diff_masks
+from .roi import Roi
+from .settings import SLIDER_UPDATE_MS
 
 class ThresholdMixin:
 

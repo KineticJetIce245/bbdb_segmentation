@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from common import normalize_flip, normalize_rotation
-from paths import resolve_path
+from .transforms import normalize_flip, normalize_rotation
+from .paths import resolve_path
 
 
 def read_records(csv_path: Path) -> pd.DataFrame:

@@ -4,7 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from settings import ZOOM_STEP
+from .settings import ZOOM_STEP
 
 
 class UiMixin:

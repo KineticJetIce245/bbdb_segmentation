@@ -8,9 +8,9 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 from scipy import ndimage
 
-from common import decode_flip, encode_flip, normalize_rotation
-from image_ops import mask_diff as diff_masks
-from settings import CONTROL_MASK, SHIFT_MASK, UNDO_LIMIT
+from .transforms import decode_flip, encode_flip, normalize_rotation
+from .image_ops import mask_diff as diff_masks
+from .settings import CONTROL_MASK, SHIFT_MASK, UNDO_LIMIT
 
 class PaintMixin:
 

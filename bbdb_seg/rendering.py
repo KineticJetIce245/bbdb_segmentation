@@ -8,10 +8,10 @@ import tkinter as tk
 import numpy as np
 from PIL import Image, ImageTk
 
-from common import apply_transform
-from image_ops import LANCZOS, NEAREST, apply_contrast as contrast_array
-from settings import MIN_ZOOM
-from view_math import (
+from .transforms import apply_transform
+from .image_ops import LANCZOS, NEAREST, apply_contrast as contrast_array
+from .settings import MIN_ZOOM
+from .view_math import (
     clamp_pan as clamp_pan_value,
     fit_scale,
     max_zoom as max_zoom_value,

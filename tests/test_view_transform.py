@@ -25,8 +25,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from segment_gui import SegmentGui  # noqa: E402
-from settings import (  # noqa: E402
+from bbdb_seg.app import SegmentGui  # noqa: E402
+from bbdb_seg.settings import (  # noqa: E402
     CONTROL_MASK,
     MAX_VIEW_PIXELS,
     MIN_ZOOM,
