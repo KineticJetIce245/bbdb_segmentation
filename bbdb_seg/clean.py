@@ -22,7 +22,15 @@ from __future__ import annotations
 import numpy as np
 from scipy import ndimage
 
-from .settings import BG_MARGIN, BG_TOLERANCE, CLEAN_BAND, CLEAN_MIN_ISLAND
+from .settings import (
+    BG_MARGIN,
+    BG_TOLERANCE,
+    CLEAN_BAND,
+    CLEAN_MIN_ISLAND,
+    LEGEND_BAND,
+    LEGEND_MARGIN,
+    LEGEND_MAX_AREA,
+)
 
 try:  # exact watershed; optional dependency
     from skimage.segmentation import watershed as _sk_watershed
@@ -56,6 +64,66 @@ def background_mask(
     if margin > 0:
         bg = ndimage.binary_dilation(bg, structure=_disk(1), iterations=margin)
     return bg
+
+
+def legend_mask(
+    gray: np.ndarray,
+    background: np.ndarray | None = None,
+    band: float = LEGEND_BAND,
+    max_area: float = LEGEND_MAX_AREA,
+    margin: int = LEGEND_MARGIN,
+) -> np.ndarray:
+    """Bool mask of slide text, numbers and scale bars (never cortex).
+
+    BBDB slides carry labels ("63-310", "#1650"), a scale bar and a credit line
+    in the top and bottom margins. They are small separate dark blobs, while the
+    section is one large blob. A non-background component counts as legend when:
+
+    * it lies entirely in the top or bottom ``band`` (fraction of the height),
+    * it is small: below ``max_area`` of the image, and
+    * it does not touch the largest component.
+
+    The result is grown by ``margin`` px to cover the letters' soft edges.
+    """
+    gray = np.asarray(gray)
+    if background is None:
+        background = background_mask(gray, margin=0)
+    foreground = ~background
+    labels, count = ndimage.label(foreground, structure=np.ones((3, 3), bool))
+    if count == 0:
+        return np.zeros(gray.shape, bool)
+    height, width = gray.shape
+    sizes = np.bincount(labels.ravel())
+    sizes[0] = 0
+    top_limit = band * height
+    bottom_limit = (1.0 - band) * height
+    slices = ndimage.find_objects(labels)
+    in_band = np.zeros(count + 1, bool)
+    for index, slc in enumerate(slices, start=1):
+        if slc is not None:
+            rows = slc[0]
+            in_band[index] = rows.stop <= top_limit or rows.start >= bottom_limit
+    # The section is the largest blob that is NOT confined to a margin band
+    # (on near-empty slides the biggest blob can be a line of text).
+    candidates = np.where(~in_band)[0]
+    candidates = candidates[candidates > 0]
+    main = int(candidates[np.argmax(sizes[candidates])]) if len(candidates) else 0
+    limit = max_area * height * width
+    if main:
+        near_main = ndimage.binary_dilation(labels == main, iterations=2)
+        touching = set(np.unique(labels[near_main]).tolist())
+    else:
+        touching = set()
+    keep = np.zeros(count + 1, bool)
+    for index in range(1, count + 1):
+        if index == main or index in touching:
+            continue
+        if in_band[index] and sizes[index] <= limit:
+            keep[index] = True
+    legend = keep[labels]
+    if margin > 0 and legend.any():
+        legend = ndimage.binary_dilation(legend, iterations=margin)
+    return legend
 
 
 def remove_small_islands(mask: np.ndarray, min_size: int = CLEAN_MIN_ISLAND) -> np.ndarray:

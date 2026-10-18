@@ -23,3 +23,9 @@ BG_TOLERANCE = 12        # gray levels from the border median that count as back
 BG_MARGIN = 1            # px grown around background to absorb the blurry tissue rim
 CLEAN_BAND = 3           # px band around the mask boundary that edge snapping may move
 CLEAN_MIN_ISLAND = 30    # px; smaller connected pieces are removed by Clean
+LEGEND_BAND = 0.2        # top/bottom fraction of the slide where labels and scale bars live
+LEGEND_MAX_AREA = 0.004  # legend blobs are smaller than this fraction of the image
+LEGEND_MARGIN = 2        # px grown around detected text to cover soft letter edges
+SMOOTH_STROKES = True    # default for the "Smooth strokes" checkbox
+SMOOTH_ALPHA = 0.35      # brush stabiliser: 1 = raw pointer, smaller = smoother
+LASSO_SMOOTH_ITERATIONS = 2  # Chaikin corner-cutting passes applied to lasso outlines
