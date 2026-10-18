@@ -3,14 +3,14 @@
 
 Reads one ``csv/<specimen>_<stain>.csv`` file produced by
 ``make_segmentation_csvs.py``. Every row whose ``segmentation`` file does not
-exist yet is opened one by one. Each image starts with an Otsu-threshold mask
-(pixels >= threshold are 1, below are 0) shown as a red overlay; the
-threshold slider moves that level, and the mask can then be edited by hand.
+exist yet is opened one by one. Each image starts with an Otsu-based intensity
+band shown as a red overlay; the min/max threshold sliders adjust that band,
+and the mask can then be edited by hand.
 
 Features
-  * Threshold slider (default: Otsu level) regenerates the mask from the image.
-    "Invert" selects pixels below the level instead (useful for dark tissue on a
-    bright background; auto-detected per image).
+  * Two threshold sliders select the intensity range ``min <= value <= max``.
+    "Invert" selects pixels outside that range instead. The initial range is
+    picked from the Otsu level and the image border (dark or bright background).
   * Paint (left drag) / erase (right drag), clear, erode, dilate.
   * Rotate / flip the view; the flip/rotation is recorded to the CSV, while the
     saved mask always stays aligned with the image on disk.
@@ -63,6 +63,7 @@ MAX_ZOOM = 8.0
 MAX_VIEW_PIXELS = 12_000_000  # cap the rendered image so PhotoImage stays small
 SHIFT_MASK = 0x0001
 CONTROL_MASK = 0x0004
+SLIDER_UPDATE_MS = 30   # coalesce threshold/opacity/contrast slider events
 
 try:  # Pillow >= 9.1 moved the resampling filters onto Image.Resampling.
     NEAREST = Image.Resampling.NEAREST
@@ -169,8 +170,15 @@ class SegmentGui(tk.Tk):
         self.overlay_alpha = OVERLAY_ALPHA
         self.contrast_min = 0
         self.contrast_max = 255
-        self.threshold = 0
+        self.threshold_min = 0
+        self.threshold_max = 255
+        self.bright_border = False
         self.otsu = 0
+        self.threshold_pending = False
+        self.alpha_pending = False
+        self.contrast_pending = False
+        self.slider_after_id: str | None = None
+        self.ui_ready = False
         self.mask_dirty = False
         self.mask_source = ""
         self.last_pt: tuple[int, int] | None = None
@@ -209,6 +217,7 @@ class SegmentGui(tk.Tk):
         self.deiconify()
 
         self.build_ui()
+        self.ui_ready = True
         self.bind_all("<Key>", self.on_key)
         self.bind_all("<Control-z>", lambda _e: self.undo())
         self.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -327,39 +336,50 @@ class SegmentGui(tk.Tk):
 
         controls = ttk.Frame(self, padding=(8, 2))
         controls.grid(row=1, column=0, sticky="ew")
-        self.threshold_scale = tk.Scale(
-            controls, from_=0, to=255, orient="horizontal", length=320,
-            label="Threshold", command=self.on_threshold_change,
+
+        threshold_row = ttk.Frame(controls)
+        threshold_row.pack(side="top", fill="x")
+        self.threshold_min_scale = tk.Scale(
+            threshold_row, from_=0, to=255, orient="horizontal", length=170,
+            label="Threshold min", command=self.on_threshold_min_change,
             takefocus=False, highlightthickness=0,
         )
-        self.threshold_scale.pack(side="left", padx=(0, 4))
-        ttk.Button(controls, text="Otsu (t)", command=self.reset_threshold).pack(side="left")
+        self.threshold_min_scale.pack(side="left", padx=(0, 4))
+        self.threshold_max_scale = tk.Scale(
+            threshold_row, from_=0, to=255, orient="horizontal", length=170,
+            label="Threshold max", command=self.on_threshold_max_change,
+            takefocus=False, highlightthickness=0,
+        )
+        self.threshold_max_scale.pack(side="left", padx=(0, 8))
+        ttk.Button(threshold_row, text="Otsu (t)", command=self.reset_threshold).pack(side="left")
         ttk.Checkbutton(
-            controls, text="Invert (i)", variable=self.invert_var, command=self.apply_threshold,
+            threshold_row, text="Invert (i)", variable=self.invert_var, command=self.on_invert_change,
             takefocus=False,
         ).pack(side="left", padx=(6, 4))
-        ttk.Label(controls, textvariable=self.otsu_var, width=10).pack(side="left", padx=(0, 18))
+        ttk.Label(threshold_row, textvariable=self.otsu_var, width=10).pack(side="left", padx=(0, 18))
 
+        display_row = ttk.Frame(controls)
+        display_row.pack(side="top", fill="x", pady=(4, 0))
         self.alpha_scale = tk.Scale(
-            controls, from_=0, to=255, orient="horizontal", length=160,
+            display_row, from_=0, to=255, orient="horizontal", length=160,
             label="Overlay opacity", command=self.on_alpha_change,
             takefocus=False, highlightthickness=0,
         )
         self.alpha_scale.pack(side="left", padx=(0, 14))
         self.min_scale = tk.Scale(
-            controls, from_=0, to=255, orient="horizontal", length=180,
+            display_row, from_=0, to=255, orient="horizontal", length=180,
             label="Contrast min", command=self.on_contrast_change,
             takefocus=False, highlightthickness=0,
         )
         self.min_scale.pack(side="left", padx=(0, 8))
         self.max_scale = tk.Scale(
-            controls, from_=0, to=255, orient="horizontal", length=180,
+            display_row, from_=0, to=255, orient="horizontal", length=180,
             label="Contrast max", command=self.on_contrast_change,
             takefocus=False, highlightthickness=0,
         )
         self.max_scale.pack(side="left", padx=(0, 8))
-        ttk.Button(controls, text="Auto", command=self.auto_contrast).pack(side="left", padx=(4, 4))
-        ttk.Button(controls, text="Reset", command=self.reset_contrast).pack(side="left")
+        ttk.Button(display_row, text="Auto", command=self.auto_contrast).pack(side="left", padx=(4, 4))
+        ttk.Button(display_row, text="Reset", command=self.reset_contrast).pack(side="left")
         self.alpha_scale.set(self.overlay_alpha)
         self.min_scale.set(self.contrast_min)
         self.max_scale.set(self.contrast_max)
@@ -400,7 +420,7 @@ class SegmentGui(tk.Tk):
             "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase\n"
             "f: fill    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    s: save    "
             "Wheel: zoom    Shift+Wheel: brush    +/-: zoom    0: fit    Middle/Ctrl-drag: pan    Esc/q: quit\n"
-            "(moving the threshold replaces hand edits)"
+            "(moving the threshold sliders replaces hand edits)"
         )
         ttk.Label(self, text=help_text, padding=(8, 2)).grid(row=4, column=0, sticky="w")
         self.update_brush_label()
@@ -433,12 +453,16 @@ class SegmentGui(tk.Tk):
         self.native_hw = native_hw
         height, width = base_img.shape
         self.base_index = np.arange(height * width, dtype=np.int32).reshape(height, width)
+        self.cancel_slider_updates()
 
         self.otsu = otsu_threshold(base_img)
         self.otsu_var.set(f"Otsu: {self.otsu}")
-        self.invert_var.set(bright_background(base_img, self.otsu))
-        self.threshold = self.otsu
-        self.threshold_scale.set(self.otsu)
+        self.bright_border = bright_background(base_img, self.otsu)
+        self.invert_var.set(False)
+        if self.bright_border:
+            self.set_threshold_range(0, self.otsu)
+        else:
+            self.set_threshold_range(self.otsu, 255)
 
         seg_path = self.seg_path(self.index)
         self.base_mask_img = None
@@ -469,13 +493,69 @@ class SegmentGui(tk.Tk):
         self.render_all()
 
     # --- threshold ---------------------------------------------------------- #
+    def cancel_slider_updates(self) -> None:
+        if self.slider_after_id is not None:
+            self.after_cancel(self.slider_after_id)
+            self.slider_after_id = None
+        self.threshold_pending = False
+        self.alpha_pending = False
+        self.contrast_pending = False
+
+    def schedule_slider_update(self, kind: str) -> None:
+        """Coalesce rapid slider events into one render every ~30 ms."""
+        if not self.ui_ready:
+            return
+        if kind == "threshold":
+            self.threshold_pending = True
+        elif kind == "alpha":
+            self.alpha_pending = True
+        elif kind == "contrast":
+            self.contrast_pending = True
+        if self.slider_after_id is None:
+            self.slider_after_id = self.after(SLIDER_UPDATE_MS, self.run_slider_updates)
+
+    def run_slider_updates(self) -> None:
+        self.slider_after_id = None
+        self.apply_pending_slider_updates()
+
+    def flush_slider_updates(self) -> None:
+        if self.slider_after_id is not None:
+            self.after_cancel(self.slider_after_id)
+            self.slider_after_id = None
+        self.apply_pending_slider_updates()
+
+    def apply_pending_slider_updates(self) -> None:
+        do_threshold = self.threshold_pending
+        do_alpha = self.alpha_pending
+        do_contrast = self.contrast_pending
+        self.threshold_pending = False
+        self.alpha_pending = False
+        self.contrast_pending = False
+        if do_threshold:
+            self.apply_threshold()
+        elif do_alpha:
+            self.render_overlay()
+        if do_contrast:
+            self.render_background()
+
     def threshold_mask(self) -> Image.Image:
         assert self.base_img is not None
+        low, high = self.threshold_min, self.threshold_max
         if self.invert_var.get():
-            binary = self.base_img < self.threshold
+            binary = (self.base_img < low) | (self.base_img > high)
         else:
-            binary = self.base_img >= self.threshold
+            binary = (self.base_img >= low) & (self.base_img <= high)
         return Image.fromarray(binary.astype(np.uint8) * 255)
+
+    def set_threshold_range(self, low: int, high: int) -> None:
+        low = max(0, min(255, int(low)))
+        high = max(0, min(255, int(high)))
+        if low > high:
+            low, high = high, low
+        self.threshold_min = low
+        self.threshold_max = high
+        self.threshold_min_scale.set(low)
+        self.threshold_max_scale.set(high)
 
     def apply_threshold(self) -> None:
         if self.base_img is None:
@@ -487,22 +567,44 @@ class SegmentGui(tk.Tk):
         self.mask_source = "threshold"
         self.mark_edited()
 
-    def on_threshold_change(self, value: str) -> None:
+    def on_threshold_min_change(self, value: str) -> None:
         level = int(float(value))
-        # Scale.set() also fires this callback; ignore programmatic no-op updates.
-        if level == self.threshold:
+        if level == self.threshold_min:
             return
-        self.threshold = level
-        self.apply_threshold()
+        self.threshold_min = level
+        if self.threshold_min > self.threshold_max:
+            self.threshold_max = self.threshold_min
+            self.threshold_max_scale.set(self.threshold_max)
+        self.schedule_slider_update("threshold")
+
+    def on_threshold_max_change(self, value: str) -> None:
+        level = int(float(value))
+        if level == self.threshold_max:
+            return
+        self.threshold_max = level
+        if self.threshold_max < self.threshold_min:
+            self.threshold_min = self.threshold_max
+            self.threshold_min_scale.set(self.threshold_min)
+        self.schedule_slider_update("threshold")
 
     def reset_threshold(self) -> None:
-        self.threshold = self.otsu
-        self.threshold_scale.set(self.otsu)
+        self.flush_slider_updates()
+        self.invert_var.set(False)
+        if self.bright_border:
+            self.set_threshold_range(0, self.otsu)
+        else:
+            self.set_threshold_range(self.otsu, 255)
+        self.last_action = None
+        self.apply_threshold()
+
+    def on_invert_change(self) -> None:
+        self.flush_slider_updates()
+        self.last_action = None
         self.apply_threshold()
 
     def toggle_invert(self) -> None:
         self.invert_var.set(not self.invert_var.get())
-        self.apply_threshold()
+        self.on_invert_change()
 
     # --- rendering ---------------------------------------------------------- #
     def render_all(self) -> None:
@@ -596,12 +698,12 @@ class SegmentGui(tk.Tk):
 
     def on_alpha_change(self, value: str) -> None:
         self.overlay_alpha = int(float(value))
-        self.render_overlay()
+        self.schedule_slider_update("alpha")
 
     def on_contrast_change(self, _value: str | None = None) -> None:
         self.contrast_min = int(self.min_scale.get())
         self.contrast_max = int(self.max_scale.get())
-        self.render_background()
+        self.schedule_slider_update("contrast")
 
     def auto_contrast(self) -> None:
         """Stretch the window to the current image's actual value range."""
@@ -611,12 +713,18 @@ class SegmentGui(tk.Tk):
         hi = int(self.base_img.max())
         if hi <= lo:
             hi = min(255, lo + 1)
+        self.contrast_min, self.contrast_max = lo, hi
         self.min_scale.set(lo)
         self.max_scale.set(hi)
+        self.schedule_slider_update("contrast")
+        self.flush_slider_updates()
 
     def reset_contrast(self) -> None:
+        self.contrast_min, self.contrast_max = 0, 255
         self.min_scale.set(0)
         self.max_scale.set(255)
+        self.schedule_slider_update("contrast")
+        self.flush_slider_updates()
 
     # --- zoom / pan --------------------------------------------------------- #
     def zoom_at(self, x: float, y: float, factor: float) -> None:
@@ -737,6 +845,7 @@ class SegmentGui(tk.Tk):
             self.update_cursor(self.last_mouse[0], self.last_mouse[1], self.tool == "erase")
 
     def on_press(self, event: tk.Event, right: bool) -> None:
+        self.flush_slider_updates()
         self.canvas.focus_set()
         if event.state & CONTROL_MASK:
             self.start_pan(event)
@@ -810,6 +919,7 @@ class SegmentGui(tk.Tk):
         self.last_action = action
 
     def undo(self) -> None:
+        self.flush_slider_updates()
         if not self.undo_stack:
             self.status_var.set("Nothing to undo")
             return
@@ -825,6 +935,7 @@ class SegmentGui(tk.Tk):
         self.schedule_mask_save()
 
     def clear_mask(self) -> None:
+        self.flush_slider_updates()
         if self.base_mask_img is None:
             return
         self.push_undo("clear")
@@ -834,6 +945,7 @@ class SegmentGui(tk.Tk):
 
     def apply_morphology(self, grow: bool) -> None:
         """Dilate (grow) or erode (shrink) the mask by one pixel step."""
+        self.flush_slider_updates()
         if self.base_mask_img is None:
             return
         kernel = ImageFilter.MaxFilter(3) if grow else ImageFilter.MinFilter(3)
@@ -850,6 +962,7 @@ class SegmentGui(tk.Tk):
 
     # --- transforms --------------------------------------------------------- #
     def set_transform(self, flip: str, rotation: int) -> None:
+        self.flush_slider_updates()
         self.flip = flip
         self.rotation = normalize_rotation(rotation)
         self.records.at[self.index, "flip"] = self.flip
@@ -927,6 +1040,7 @@ class SegmentGui(tk.Tk):
 
     # --- navigation / keys -------------------------------------------------- #
     def move(self, delta: int) -> None:
+        self.flush_slider_updates()
         self.flush_mask()
         self.pos = (self.pos + delta) % len(self.queue)
         self.index = self.queue[self.pos]
@@ -934,6 +1048,7 @@ class SegmentGui(tk.Tk):
 
     def accept_and_next(self) -> None:
         """Save the current mask as-is (even if unedited) and advance."""
+        self.flush_slider_updates()
         self.mask_dirty = True
         self.flush_mask()
         self.status_var.set("Saved")
@@ -1045,6 +1160,7 @@ class SegmentGui(tk.Tk):
         output.to_csv(self.csv_path, index=False)
 
     def commit_current(self) -> None:
+        self.flush_slider_updates()
         self.flush_mask()
         if self.pending_save_id is not None:
             self.after_cancel(self.pending_save_id)

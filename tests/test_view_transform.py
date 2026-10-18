@@ -109,6 +109,7 @@ class SegmentGuiViewTests(unittest.TestCase):
         app = getattr(self, "app", None)
         if app is None:
             return
+        app.cancel_slider_updates()
         if app.mask_save_after_id is not None:
             app.after_cancel(app.mask_save_after_id)
             app.mask_save_after_id = None
@@ -263,6 +264,93 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.assertTrue(values.issubset({0, 1}))
         self.assertIn(0, values)
         self.assertIn(1, values)
+
+    def test_threshold_range_is_inclusive_and_invert_selects_outside(self) -> None:
+        self.app.base_img = np.array([[99, 100, 150, 151]], dtype=np.uint8)
+        self.app.set_threshold_range(100, 150)
+
+        self.app.invert_var.set(False)
+        inside = np.asarray(self.app.threshold_mask())
+        np.testing.assert_array_equal(inside, np.array([[0, 255, 255, 0]], dtype=np.uint8))
+
+        self.app.invert_var.set(True)
+        outside = np.asarray(self.app.threshold_mask())
+        np.testing.assert_array_equal(outside, np.array([[255, 0, 0, 255]], dtype=np.uint8))
+
+    def test_threshold_range_crossing_clamps(self) -> None:
+        self.app.set_threshold_range(100, 150)
+        self.app.on_threshold_min_change("200")
+        self.assertEqual((self.app.threshold_min, self.app.threshold_max), (200, 200))
+
+        self.app.flush_slider_updates()
+        self.app.set_threshold_range(100, 150)
+        self.app.on_threshold_max_change("50")
+        self.assertEqual((self.app.threshold_min, self.app.threshold_max), (50, 50))
+        self.app.flush_slider_updates()
+
+    def test_threshold_callbacks_are_coalesced(self) -> None:
+        before = np.asarray(self.app.base_mask_img).copy()
+        self.app.on_threshold_min_change("10")
+        self.app.on_threshold_min_change("20")
+
+        self.assertTrue(self.app.threshold_pending)
+        self.assertIsNotNone(self.app.slider_after_id)
+        np.testing.assert_array_equal(before, np.asarray(self.app.base_mask_img))
+
+        self.app.flush_slider_updates()
+        self.assertFalse(self.app.threshold_pending)
+        self.assertIsNone(self.app.slider_after_id)
+        self.assertEqual(self.app.threshold_min, 20)
+        np.testing.assert_array_equal(
+            np.asarray(self.app.threshold_mask()),
+            np.asarray(self.app.base_mask_img),
+        )
+
+    def test_painting_flushes_pending_threshold_first(self) -> None:
+        self.app.on_threshold_min_change("10")
+        self.assertTrue(self.app.threshold_pending)
+
+        x, y = self.center()
+        self.app.on_press(make_event(x, y), right=False)
+
+        self.assertFalse(self.app.threshold_pending)
+        self.assertIsNone(self.app.slider_after_id)
+
+    def test_alpha_and_contrast_handlers_coalesce(self) -> None:
+        self.app.on_alpha_change("80")
+        self.assertEqual(self.app.overlay_alpha, 80)
+        self.assertTrue(self.app.alpha_pending)
+
+        self.app.min_scale.set(20)
+        self.app.max_scale.set(240)
+        self.app.on_contrast_change()
+        self.assertEqual((self.app.contrast_min, self.app.contrast_max), (20, 240))
+        self.assertTrue(self.app.contrast_pending)
+
+        self.app.flush_slider_updates()
+        self.assertFalse(self.app.alpha_pending)
+        self.assertFalse(self.app.contrast_pending)
+
+    def test_otsu_reset_turns_invert_off_and_restores_initial_band(self) -> None:
+        self.app.set_threshold_range(100, 150)
+        self.app.invert_var.set(True)
+        self.app.reset_threshold()
+
+        expected = (0, self.app.otsu) if self.app.bright_border else (self.app.otsu, 255)
+        self.assertEqual((self.app.threshold_min, self.app.threshold_max), expected)
+        self.assertFalse(self.app.invert_var.get())
+
+    def test_initial_band_selects_the_non_background_side(self) -> None:
+        expected = (0, self.app.otsu) if self.app.bright_border else (self.app.otsu, 255)
+        self.assertEqual((self.app.threshold_min, self.app.threshold_max), expected)
+        self.assertFalse(self.app.invert_var.get())
+
+    def test_auto_contrast_applies_immediately(self) -> None:
+        self.app.auto_contrast()
+        expected = (int(self.app.base_img.min()), int(self.app.base_img.max()))
+        self.assertEqual((self.app.contrast_min, self.app.contrast_max), expected)
+        self.assertIsNone(self.app.slider_after_id)
+        self.assertFalse(self.app.contrast_pending)
 
 
 class PanClampTests(unittest.TestCase):

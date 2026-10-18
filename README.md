@@ -3,10 +3,10 @@
 A brainhack project to segment the **cerebral cortex** by hand in brain
 sections from many mammal species. The sections come from the **Brain
 Biodiversity Bank** (BBDB). The project includes a small desktop tool to make
-the work quick. Each section opens with a starting mask from an **Otsu
-threshold**. You can move the threshold with a slider and then fix the mask with
-a brush, paint bucket and undo. The finished masks are saved as 0/1 PNGs in this
-repository so they can be committed and shared.
+the work quick. Each section opens with a starting mask from an **Otsu-based
+intensity range**. You can move the minimum and maximum threshold sliders and
+then fix the mask with a brush, paint bucket and undo. The finished masks are
+saved as 0/1 PNGs in this repository so they can be committed and shared.
 
 The work is split into one CSV per **specimen and stain** (for example
 `csv/lion_nissl.csv`). Participants can each take one or more CSVs. A section
@@ -160,16 +160,16 @@ very dark.
 
 What this means for the threshold tool:
 
-- **Nissl:** with **Invert** on (the default for these images), the Otsu mask
-  usually selects most of the tissue. Try **lowering** the threshold so that
-  only the darker cortex stays selected. Then erase the cerebellum, brainstem
+- **Nissl:** the cortex is dark. The GUI starts with a range such as
+  `0–Otsu`, which selects the dark tissue, and **Invert** off. To keep only the
+  darker cortex, lower **Threshold max**. Then erase the cerebellum, brainstem
   and any remaining white matter, and use **Fill** to close small holes.
 - **Myelin:** the cortex is the pale band *between* the dark white matter and
-  the white background, so one threshold can't isolate it. One approach is to
-  keep **Invert** on and **raise** the threshold until the whole section is
-  selected, then erase the dark white matter and the cerebellum. You can also
-  simply paint the cortex with the brush. Raising **Contrast min** can make the
-  pale cortex easier to see.
+  the white background. Set **Threshold min** above the dark white matter and
+  **Threshold max** below the white background to select that pale band. If the
+  band looks too narrow, widen the range. **Invert** selects everything outside
+  the range instead. Raising **Contrast min** can make the pale cortex easier
+  to see.
 - The `owl_monkey_nissl+myelin` and `red_kangaroo_nissl+myelin` groups mix both
   kinds, so check which kind each section is before you start.
 
@@ -179,12 +179,12 @@ What this means for the threshold tool:
 
 - Opens only the sections in a CSV that **do not have a segmentation yet**, one
   after another.
-- A **threshold slider** builds the mask from the image. Pixels at or above the
-  level become `1` and pixels below become `0`. The slider starts at the
-  image's **Otsu threshold**.
-- An **Invert** option selects pixels *below* the level instead. Most BBDB
-  sections are dark tissue on a white background, so Invert is switched on
-  automatically when the image border falls in the bright class.
+- **Threshold min** and **Threshold max** build the mask from the image.
+  Pixels inside the range `min <= value <= max` become `1`; pixels outside
+  become `0`. The initial range is chosen from the image's **Otsu threshold**
+  and whether the border is dark or bright.
+- **Invert** selects pixels *outside* the range instead. It starts off; the
+  initial range already selects the non-background side.
 - You can **draw** and **erase** with the brush, **clear** the mask, or
   **erode** / **dilate** it by one pixel.
 - A **paint bucket** fills a connected region of the mask in one click, for
@@ -370,7 +370,7 @@ review them anyway. To always open every section, use `--all`.
 │ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Undo  Clear  Erode/Dilate │ toolbar
 │ Brush ±  Accept & next (Enter)  ● segmented / ○ not saved                   │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ Threshold [====|====]  Otsu  ☑ Invert  Otsu: 214  Opacity  Contrast …    │ sliders
+│ Threshold min [====]  max [====]  Otsu  ☐ Invert  Otsu: 214  Opacity  Contrast … │ sliders
 ├──────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │                section image with red mask overlay                       │ canvas
@@ -385,25 +385,29 @@ The status bar shows:
 - your position in the list and how many sections are still left;
 - the section name;
 - where the mask came from:
-  - `threshold`: generated from the slider;
+  - `threshold`: generated from the threshold range;
   - `edited`: changed by hand;
   - `saved`: loaded from an existing file;
 - the flip/rotation and zoom currently applied.
 
 ### Threshold
 
-- When a section loads, the **Threshold** slider is set to that image's Otsu
-  level, which gives you a starting mask.
-- Dragging the slider **rebuilds the mask from the image**. Pixels at or above
-  the level become `1`. With **Invert** checked, pixels below the level become
-  `1` instead.
-- **Otsu (t)** puts the slider back to the Otsu level.
-- **Invert (i)** is set automatically for each image, but you can toggle it.
-- Moving the slider or toggling Invert **replaces any brush edits**, so set the
-  threshold first and paint afterwards. If you move the slider by accident,
+- When a section loads, the two threshold sliders are set to the initial
+  Otsu-based band: `0–Otsu` if the image border is bright (dark tissue on a
+  light background), or `Otsu–255` if the border is dark. **Invert** starts
+  unchecked.
+- Dragging either slider **rebuilds the mask from the image**. Pixels inside
+  `min <= value <= max` become `1`; pixels outside become `0`. With
+  **Invert** checked, pixels outside the range become `1` instead.
+- **Otsu (t)** resets both sliders to the initial band and turns **Invert** off.
+- Moving either slider or toggling Invert **replaces any brush edits**, so set
+  the range first and paint afterwards. If you move a slider by accident,
   **Undo** brings your edits back; a whole slider drag counts as one step.
+- Slider updates are coalesced (about every 30 ms) so dragging stays
+  responsive. The latest value is always applied before you paint, save, or
+  change section.
 - See [the two types of sections](#background-the-two-types-of-sections) for
-  threshold strategies for Nissl and myelin sections.
+  range strategies for Nissl and myelin sections.
 
 ### Keyboard shortcuts
 
@@ -412,7 +416,7 @@ The status bar shows:
 | `Enter`        | Accept the current mask (save it) and go next  |
 | Left / Up      | Previous section                               |
 | Right / Down   | Next section                                   |
-| `t`            | Reset threshold to Otsu                        |
+| `t`            | Reset the threshold range to the Otsu band     |
 | `i`            | Toggle Invert                                  |
 | `r`            | Rotate 90°                                     |
 | `h` / `v`      | Flip horizontal / vertical                     |
@@ -464,9 +468,9 @@ values, or the saved mask. Zoom and pan also change only the view.
 ### Typical workflow
 
 1. Open your assigned CSV. The first section that isn't segmented yet loads
-   with its Otsu mask.
-2. Adjust **Threshold** (and **Invert** if needed) until the mask is as close
-   to the cerebral cortex as possible.
+   with its Otsu range.
+2. Adjust **Threshold min** / **Threshold max** (and **Invert** if needed) until
+   the mask is as close to the cerebral cortex as possible.
 3. Fix the rest by hand. Erase the white matter, cerebellum, brainstem and any
    text. Left-drag adds to the mask, right-drag removes from it, the **Fill**
    bucket fills holes, and `E`/`D` trims or grows the edges. Use **Undo**
@@ -684,7 +688,11 @@ The GUI needs a display. Run it locally, or use `ssh -X` or a remote desktop.
   1600 px on their longest side for editing.
 - Masks are scaled back to the image's native resolution, using
   nearest-neighbour resampling, when they are saved.
-- The Otsu level is computed from the histogram of the grayscale image.
+- The Otsu level is computed from the histogram of the grayscale image. On
+  load, it defines the initial threshold band; the two sliders move the lower
+  and upper edge of that band.
+- Pixels inside the threshold range become `1`, pixels outside become `0`.
+  **Invert** swaps those two classes.
 - Flips and rotations change only the display. Brush strokes are mapped back
   through the current transform, so the saved mask always lines up with the
   original image on disk.
