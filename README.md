@@ -219,11 +219,27 @@ What this means for the threshold tool:
 ## Repository layout
 
 ```
-segment_gui.py              # the segmentation GUI
+segment_gui.py              # entry point + SegmentGui controller composition
+gui_ui.py                   # Tk widget construction
+gui_io.py                   # image/mask loading, saving and status
+gui_queue.py                # CSV selection and work-queue refresh
+gui_threshold.py            # threshold range, Invert and slider coalescing
+gui_roi.py                  # ROI selection, activation and drawing
+gui_paint.py                # brush/fill/undo/morphology and transforms
+gui_tools.py                # brush size, tool mode and cursor
+gui_render.py               # canvas rendering, zoom and pan
+settings.py                 # shared defaults and constants
+paths.py                    # data-root discovery and path helpers
+datasets.py                 # group-CSV loading and queue helpers
+image_ops.py                # Otsu, threshold mask, contrast and mask diff
+roi.py                      # ROI model and base/display coordinate mapping
+view_math.py                # fit/zoom/pan calculations
+ops_log.py                  # append-only .ops.jsonl writer
+common.py                   # flip/rotation helpers
 make_segmentation_csvs.py   # builds csv/*.csv from sect_info.csv + the image folders
-common.py                   # shared flip/rotation and path helpers
 sect_info.csv               # specimen / species / stain / section metadata for every image
 requirements.txt            # Python dependencies
+tests/                      # unittest suite
 csv/                        # one CSV per specimen_stain  (the GUI input; tracked in git)
 segmentations/              # saved masks and .ops.jsonl logs (tracked in git), one folder per specimen_stain
 docs/                       # figures used in this README
