@@ -127,9 +127,8 @@ class ThresholdMixin:
         roi = self.active_roi()
         if roi is not None:
             after = before.copy()
-            after[roi.r0:roi.r1, roi.c0:roi.c1] = thresholded[
-                roi.r0:roi.r1, roi.c0:roi.c1
-            ]
+            roi_mask = roi.mask_array(*before.shape)
+            after[roi_mask] = thresholded[roi_mask]
         else:
             after = thresholded
         self.base_mask_img = Image.fromarray(after)

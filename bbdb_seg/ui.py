@@ -136,6 +136,9 @@ class UiMixin:
         self.canvas.bind("<Shift-ButtonPress-1>", self.start_roi_select)
         self.canvas.bind("<Shift-B1-Motion>", self.drag_roi_select)
         self.canvas.bind("<Shift-ButtonRelease-1>", self.end_roi_select)
+        self.canvas.bind("<Shift-ButtonPress-3>", self.start_lasso_select)
+        self.canvas.bind("<Shift-B3-Motion>", self.drag_lasso_select)
+        self.canvas.bind("<Shift-ButtonRelease-3>", self.end_lasso_select)
         self.canvas.bind("<ButtonPress-3>", lambda e: self.on_press(e, right=True))
         self.canvas.bind("<B3-Motion>", lambda e: self.on_drag(e, right=True))
         self.canvas.bind("<ButtonRelease-3>", self.end_stroke)
@@ -168,7 +171,7 @@ class UiMixin:
             "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase\n"
             "f: fill    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    brush box: type px    s: save    "
             "Wheel: zoom    Shift+Wheel: brush    +/-: zoom    0: fit    Middle/Ctrl-drag: pan    Esc/q: quit\n"
-            "Shift-drag: new ROI    Shift-click: activate/clear ROI    Backspace/Delete: delete ROI\n"
+            "Shift+left-drag: rectangle ROI    Shift+right-drag: lasso ROI    Shift-click: activate/clear ROI    Backspace/Delete: delete ROI\n"
             "(moving the threshold sliders replaces hand edits)"
         )
         ttk.Label(self, text=help_text, padding=(8, 2)).grid(row=4, column=0, sticky="w")

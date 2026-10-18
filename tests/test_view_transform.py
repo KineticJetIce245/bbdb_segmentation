@@ -534,6 +534,74 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.app.end_roi_select(make_event(*centre))
         self.assertEqual(self.app.active_roi_id, roi.roi_id)
 
+    def test_shift_right_generic_callbacks_start_lasso_not_erase(self) -> None:
+        x, y = self.center()
+        self.app.on_press(make_event(x, y, state=SHIFT_MASK), right=True)
+        self.assertTrue(self.app.lasso_dragging)
+        self.assertIsNone(self.app.stroke_before)
+        self.assertFalse(self.app.roi_dragging)
+
+        self.app.on_drag(make_event(x + 10, y + 10, state=SHIFT_MASK), right=True)
+        self.app.end_stroke(make_event(x + 10, y + 10, state=SHIFT_MASK))
+        self.assertFalse(self.app.lasso_dragging)
+        self.assertIsNone(self.app.stroke_before)
+
+    def test_shift_right_lasso_creates_polygon_roi(self) -> None:
+        offset_x, offset_y = self.app.display_offset
+        scale = self.app.display_scale
+
+        def screen(row: int, col: int) -> tuple[int, int]:
+            disp_row, disp_col = self.app._base_to_display(row, col)
+            return (
+                int(offset_x + disp_col * scale),
+                int(offset_y + disp_row * scale),
+            )
+
+        points = [(10, 45), (10, 65), (30, 65), (30, 45)]
+        screen_points = [screen(*point) for point in points]
+        self.app.start_lasso_select(make_event(*screen_points[0]))
+        for point in screen_points[1:]:
+            self.app.drag_lasso_select(make_event(*point))
+        self.app.end_lasso_select(make_event(*screen_points[-1]))
+
+        self.assertEqual(len(self.app.rois), 1)
+        self.assertEqual(self.app.active_roi_id, 1)
+        roi = self.app.rois[0]
+        self.assertEqual(roi.shape, "polygon")
+        self.assertGreaterEqual(len(roi.points or []), 3)
+        self.assertTrue(roi.contains(20, 55))
+        self.assertFalse(roi.contains(20, 5))
+
+        # Threshold must touch only the polygon interior.
+        before = np.asarray(self.app.base_mask_img).copy()
+        self.app.set_threshold_range(0, 255)
+        self.app.invert_var.set(False)
+        self.app.apply_threshold()
+        after = np.asarray(self.app.base_mask_img)
+        mask = roi.mask_array(*before.shape)
+        self.assertTrue(np.all(after[mask] == 255))
+        np.testing.assert_array_equal(after[~mask], before[~mask])
+
+        record = json.loads(self.app.ops_path(self.app.index).read_text().splitlines()[0])
+        self.assertEqual(record["op"], "roi_create")
+        self.assertEqual(record["roi_shape"], "polygon")
+        self.assertGreaterEqual(len(record["roi_points"]), 3)
+
+        # Shift+right click inside the polygon re-activates it.
+        self.app.deactivate_roi()
+        centre = screen(20, 55)
+        self.app.start_lasso_select(make_event(*centre))
+        self.app.end_lasso_select(make_event(*centre))
+        self.assertEqual(self.app.active_roi_id, roi.roi_id)
+
+    def test_shift_right_binding_is_registered(self) -> None:
+        for sequence, handler in (
+            ("<Shift-ButtonPress-3>", "start_lasso_select"),
+            ("<Shift-B3-Motion>", "drag_lasso_select"),
+            ("<Shift-ButtonRelease-3>", "end_lasso_select"),
+        ):
+            self.assertIn(handler, self.app.canvas.bind(sequence))
+
     def test_review_finished_checkbox_rebuilds_queue(self) -> None:
         # Add a second pending section to the in-memory records.
         extra = self.app.records.iloc[0].copy()

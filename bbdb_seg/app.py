@@ -39,6 +39,7 @@ import numpy as np
 from PIL import Image
 
 from .session import IOMixin
+from .lasso import LassoMixin
 from .painting import PaintMixin
 from .work_queue import QueueMixin
 from .rendering import RenderMixin
@@ -55,7 +56,7 @@ from .settings import (
 )
 
 
-class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, PaintMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
+class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, PaintMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
     def __init__(
         self,
         csv_path: Path | None,
@@ -117,6 +118,10 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, PaintMixin, Tool
         self.roi_drag_start: tuple[int, int] | None = None
         self.roi_dragging = False
         self.roi_drag_moved = False
+        self.lasso_dragging = False
+        self.lasso_points: list[tuple[int, int]] = []
+        self.lasso_item: int | None = None
+        self.lasso_moved = False
         self.stroke_before: np.ndarray | None = None
         self.stroke_op = "draw"
         self.stroke_roi_id: int | None = None

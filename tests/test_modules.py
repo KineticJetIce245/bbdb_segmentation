@@ -20,7 +20,7 @@ from bbdb_seg.image_ops import (
 )
 from bbdb_seg.ops_log import append_operation, operations_path
 from bbdb_seg.paths import find_data_root
-from bbdb_seg.roi import Roi, base_to_display, roi_at_point, roi_screen_rect
+from bbdb_seg.roi import Roi, base_to_display, roi_at_point, roi_screen_points, roi_screen_rect
 from bbdb_seg.view_math import clamp_pan, fit_scale, max_zoom
 
 
@@ -68,6 +68,22 @@ class RoiTests(unittest.TestCase):
     def test_roi_bbox(self) -> None:
         roi = Roi(1, 1, 2, 3, 4, 0, 255, False)
         self.assertEqual(roi.bbox, [1, 2, 3, 4])
+
+    def test_polygon_roi_contains_and_masks(self) -> None:
+        points = [(10, 10), (10, 29), (29, 29), (29, 10)]
+        roi = Roi(
+            2, 10, 10, 30, 30, 0, 255, False,
+            shape="polygon", points=points,
+        )
+        self.assertTrue(roi.contains(15, 15))
+        self.assertFalse(roi.contains(5, 5))
+        mask = roi.mask_array(40, 40)
+        self.assertTrue(mask[15, 15])
+        self.assertFalse(mask[5, 5])
+        self.assertEqual(int(mask.sum()), 400)
+        screen = roi_screen_points(roi, 40, 40, "", 0, 2.0, (10.0, 20.0))
+        self.assertEqual(screen[0], (30.0, 40.0))
+        self.assertEqual(len(screen), 4)
 
 
 class ViewMathTests(unittest.TestCase):
