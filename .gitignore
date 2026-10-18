@@ -19,5 +19,9 @@ desktop.ini
 *~
 *.swp
 
+# macOS metadata on non-APFS volumes (ExFAT etc.)
+._*
+__MACOSX/
+
 # Separate repository
 prepare_human_autoradiography/
