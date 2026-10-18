@@ -1,8 +1,7 @@
-"""Shared flip/rotation and path helpers for the segmentation tools."""
+"""Shared flip/rotation helpers."""
 from __future__ import annotations
 
 import math
-from pathlib import Path
 
 import numpy as np
 
@@ -58,17 +57,3 @@ def apply_transform(data: np.ndarray, flip_value: object, rotation_steps: object
     if rotation_steps:
         transformed = np.rot90(transformed, k=rotation_steps)
     return np.ascontiguousarray(transformed)
-
-
-def resolve_path(root_dir: Path, path_value: object) -> Path:
-    path = Path(str(path_value))
-    if path.is_absolute():
-        return path
-    return root_dir / path
-
-
-def rel_path(root_dir: Path, path: Path) -> str:
-    try:
-        return path.resolve().relative_to(root_dir.resolve()).as_posix()
-    except ValueError:
-        return path.as_posix()

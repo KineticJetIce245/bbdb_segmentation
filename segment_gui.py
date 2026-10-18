@@ -31,18 +31,14 @@ Usage
 from __future__ import annotations
 
 import argparse
-import json
-import math
 from collections import OrderedDict
-from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import numpy as np
 import pandas as pd
-from PIL import Image, ImageTk, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageTk
 from scipy import ndimage
 
 from common import (
@@ -51,108 +47,45 @@ from common import (
     encode_flip,
     normalize_flip,
     normalize_rotation,
-    resolve_path,
 )
-
-TOOL_DIR = Path(__file__).resolve().parent
-APP_TITLE = "BBDB Segmentation GUI"
-WORK_MAX = 1600          # longest side of the in-memory working image
-OVERLAY_ALPHA = 110      # 0..255 opacity of the red overlay
-MAX_CACHE_ITEMS = 4
-SAVE_DEBOUNCE_MS = 400
-DEFAULT_BRUSH = 14       # brush radius in on-screen pixels
-MIN_BRUSH = 2
-MAX_BRUSH = 120
-UNDO_LIMIT = 30
-TOOLS = ("draw", "erase", "fill")
-ZOOM_STEP = 1.25         # one wheel notch / key press
-MIN_ZOOM = 0.25          # relative to the fit-to-window scale
-MAX_ZOOM = 8.0
-MAX_VIEW_PIXELS = 12_000_000  # cap the rendered image so PhotoImage stays small
-SHIFT_MASK = 0x0001
-CONTROL_MASK = 0x0004
-SLIDER_UPDATE_MS = 30   # coalesce threshold/opacity/contrast slider events
-
-
-@dataclass
-class Roi:
-    """A rectangular selection in base-image pixel coordinates (r1/c1 exclusive)."""
-
-    roi_id: int
-    r0: int
-    c0: int
-    r1: int
-    c1: int
-    threshold_min: int
-    threshold_max: int
-    invert: bool
-
-    @property
-    def bbox(self) -> list[int]:
-        return [self.r0, self.c0, self.r1, self.c1]
-
-try:  # Pillow >= 9.1 moved the resampling filters onto Image.Resampling.
-    NEAREST = Image.Resampling.NEAREST
-    LANCZOS = Image.Resampling.LANCZOS
-except AttributeError:  # Pillow < 9.1
-    NEAREST = Image.NEAREST
-    LANCZOS = Image.LANCZOS
-
-
-# --------------------------------------------------------------------------- #
-# IO / image helpers
-# --------------------------------------------------------------------------- #
-def load_gray_work(path: Path) -> tuple[np.ndarray, tuple[int, int]]:
-    """Load an image as 2D uint8 downsampled to WORK_MAX, plus its native (h, w)."""
-    with Image.open(path) as img:
-        img = img.convert("L")
-        native_hw = (img.height, img.width)
-        scale = min(WORK_MAX / max(img.width, img.height), 1.0)
-        if scale < 1.0:
-            size = (max(1, int(img.width * scale)), max(1, int(img.height * scale)))
-            img = img.resize(size, LANCZOS)
-        return np.asarray(img, dtype=np.uint8).copy(), native_hw
-
-
-def load_mask_work(path: Path, work_hw: tuple[int, int]) -> np.ndarray:
-    """Load a mask PNG (any value > 0 is foreground) as 0/255 at working size."""
-    with Image.open(path) as img:
-        arr = np.asarray(img.convert("L"))
-    binary = (arr > 0).astype(np.uint8) * 255
-    resized = Image.fromarray(binary).resize((work_hw[1], work_hw[0]), NEAREST)
-    return np.asarray(resized, dtype=np.uint8).copy()
-
-
-def otsu_threshold(arr: np.ndarray) -> int:
-    """Otsu level t such that ``arr >= t`` is the upper class."""
-    hist = np.bincount(arr.ravel(), minlength=256).astype(np.float64)
-    prob = hist / max(hist.sum(), 1.0)
-    omega = np.cumsum(prob)
-    mu = np.cumsum(prob * np.arange(256))
-    with np.errstate(divide="ignore", invalid="ignore"):
-        sigma_b = (mu[-1] * omega - mu) ** 2 / (omega * (1.0 - omega))
-    sigma_b = np.nan_to_num(sigma_b, nan=0.0, posinf=0.0)
-    return int(min(255, np.argmax(sigma_b) + 1))
-
-
-def bright_background(arr: np.ndarray, threshold: int) -> bool:
-    """True if the image border falls in the upper (>= threshold) class."""
-    border = np.concatenate([arr[0], arr[-1], arr[:, 0], arr[:, -1]])
-    return float(np.median(border)) >= threshold
-
-
-def find_data_root(override: str | None) -> Path | None:
-    if override:
-        return Path(override).expanduser().resolve()
-    for parent in [TOOL_DIR, *TOOL_DIR.parents]:
-        for candidate in [
-            parent,
-            *sorted(parent.glob("brain_biodiversity_bank*")),
-            *sorted(parent.glob("brain_biodiversity_bank*/brain_biodiversity_bank")),
-        ]:
-            if (candidate / "v.1" / "sections").is_dir():
-                return candidate
-    return None
+from datasets import pending_indices, read_records, write_records
+from image_ops import (
+    LANCZOS,
+    NEAREST,
+    apply_contrast as contrast_array,
+    bright_background,
+    build_threshold_mask,
+    load_gray_work,
+    load_mask_work,
+    mask_diff as diff_masks,
+    otsu_threshold,
+)
+from ops_log import append_operation, operations_path
+from paths import TOOL_DIR, find_data_root, resolve_path
+from roi import Roi, base_to_display, roi_at_point, roi_screen_rect
+from settings import (
+    APP_TITLE,
+    CONTROL_MASK,
+    DEFAULT_BRUSH,
+    MAX_BRUSH,
+    MAX_CACHE_ITEMS,
+    MAX_VIEW_PIXELS,
+    MAX_ZOOM,
+    MIN_BRUSH,
+    MIN_ZOOM,
+    OVERLAY_ALPHA,
+    SAVE_DEBOUNCE_MS,
+    SHIFT_MASK,
+    SLIDER_UPDATE_MS,
+    TOOLS,
+    UNDO_LIMIT,
+    ZOOM_STEP,
+)
+from view_math import (
+    clamp_pan as clamp_pan_value,
+    fit_scale,
+    max_zoom as max_zoom_value,
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -298,26 +231,12 @@ class SegmentGui(tk.Tk):
             data_root = Path(chosen).expanduser().resolve()
 
         try:
-            records = pd.read_csv(csv_path, keep_default_na=False, dtype=str)
-            missing = {"base", "image", "segmentation"} - set(records.columns)
-            if missing:
-                raise ValueError(f"missing columns: {', '.join(sorted(missing))}")
+            records = read_records(csv_path)
         except Exception as exc:  # malformed/unreadable CSV -- report instead of crashing
             messagebox.showerror(APP_TITLE, f"Could not read CSV:\n{csv_path}\n\n{exc}", parent=self)
             return None
-        if records.empty:
-            messagebox.showerror(APP_TITLE, f"No rows found in:\n{csv_path}", parent=self)
-            return None
-        for column, default in (("flip", ""), ("rotation", "0")):
-            if column not in records.columns:
-                records[column] = default
-        records["flip"] = records["flip"].apply(normalize_flip)
-        records["rotation"] = records["rotation"].apply(normalize_rotation).astype(int)
 
-        pending = [
-            i for i in range(len(records))
-            if not resolve_path(self.seg_root, records.at[i, "segmentation"]).exists()
-        ]
+        pending = pending_indices(records, self.seg_root)
         if review_all:
             queue = list(range(len(records)))
             self.review_all = True
@@ -600,26 +519,7 @@ class SegmentGui(tk.Tk):
 
     # --- operation log ------------------------------------------------------ #
     def ops_path(self, index: int) -> Path:
-        seg = self.seg_path(index)
-        return seg.with_name(seg.stem + ".ops.jsonl")
-
-    @staticmethod
-    def mask_diff(
-        before: np.ndarray, after: np.ndarray
-    ) -> tuple[int, int, list[int] | None]:
-        changed = before != after
-        if not changed.any():
-            return 0, 0, None
-        added = int(((before == 0) & (after != 0)).sum())
-        removed = int(((before != 0) & (after == 0)).sum())
-        rows, cols = np.where(changed)
-        bbox = [
-            int(rows.min()),
-            int(cols.min()),
-            int(rows.max()) + 1,
-            int(cols.max()) + 1,
-        ]
-        return added, removed, bbox
+        return operations_path(self.seg_path(index))
 
     def log_op(
         self,
@@ -634,7 +534,6 @@ class SegmentGui(tk.Tk):
     ) -> None:
         """Append one operation record to <mask>.ops.jsonl."""
         record = {
-            "time": datetime.now().astimezone().isoformat(timespec="seconds"),
             "section": str(self.records.at[self.index, "base"]),
             "image": str(self.records.at[self.index, "image"]),
             "mask": str(self.records.at[self.index, "segmentation"]),
@@ -656,11 +555,8 @@ class SegmentGui(tk.Tk):
         }
         if extra:
             record.update(extra)
-        path = self.ops_path(self.index)
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+            append_operation(self.seg_path(self.index), record)
         except OSError as exc:
             self.status_var.set(f"Could not write ops log: {exc}")
 
@@ -717,12 +613,12 @@ class SegmentGui(tk.Tk):
 
     def threshold_mask(self) -> Image.Image:
         assert self.base_img is not None
-        low, high = self.threshold_min, self.threshold_max
-        if self.invert_var.get():
-            binary = (self.base_img < low) | (self.base_img > high)
-        else:
-            binary = (self.base_img >= low) & (self.base_img <= high)
-        return Image.fromarray(binary.astype(np.uint8) * 255)
+        return build_threshold_mask(
+            self.base_img,
+            self.threshold_min,
+            self.threshold_max,
+            bool(self.invert_var.get()),
+        )
 
     def active_roi(self) -> Roi | None:
         for roi in self.rois:
@@ -793,7 +689,7 @@ class SegmentGui(tk.Tk):
         else:
             after = thresholded
         self.base_mask_img = Image.fromarray(after)
-        added, removed, bbox = self.mask_diff(before, after)
+        added, removed, bbox = diff_masks(before, after)
         if bbox is not None:
             self.log_op(
                 "threshold",
@@ -870,38 +766,20 @@ class SegmentGui(tk.Tk):
     def _base_to_display(self, row: int, col: int) -> tuple[int, int]:
         assert self.base_img is not None
         height, width = self.base_img.shape
-        lr_flip, up_flip = decode_flip(self.flip)
-        if lr_flip:
-            col = width - 1 - col
-        if up_flip:
-            row = height - 1 - row
-        if self.rotation == 1:
-            return width - 1 - col, row
-        if self.rotation == 2:
-            return height - 1 - row, width - 1 - col
-        if self.rotation == 3:
-            return col, height - 1 - row
-        return row, col
+        return base_to_display(row, col, height, width, self.flip, self.rotation)
 
     def _roi_screen_rect(self, roi: Roi) -> tuple[float, float, float, float] | None:
         if self.base_img is None or self.display_scale <= 0:
             return None
-        corners = [
-            (roi.r0, roi.c0),
-            (roi.r0, roi.c1 - 1),
-            (roi.r1 - 1, roi.c0),
-            (roi.r1 - 1, roi.c1 - 1),
-        ]
-        display = [self._base_to_display(row, col) for row, col in corners]
-        rows = [point[0] for point in display]
-        cols = [point[1] for point in display]
-        offset_x, offset_y = self.display_offset
-        scale = self.display_scale
-        return (
-            offset_x + min(cols) * scale,
-            offset_y + min(rows) * scale,
-            offset_x + (max(cols) + 1) * scale,
-            offset_y + (max(rows) + 1) * scale,
+        height, width = self.base_img.shape
+        return roi_screen_rect(
+            roi,
+            height,
+            width,
+            self.flip,
+            self.rotation,
+            self.display_scale,
+            self.display_offset,
         )
 
     def render_rois(self) -> None:
@@ -973,11 +851,7 @@ class SegmentGui(tk.Tk):
         if point is None:
             return
         row, col = point
-        hit = None
-        for roi in reversed(self.rois):
-            if roi.r0 <= row < roi.r1 and roi.c0 <= col < roi.c1:
-                hit = roi
-                break
+        hit = roi_at_point(self.rois, row, col)
         if hit is not None:
             if hit.roi_id != self.active_roi_id:
                 self.activate_roi(hit.roi_id)
@@ -1096,18 +970,11 @@ class SegmentGui(tk.Tk):
 
     @staticmethod
     def clamp_pan(pan: float, canvas: int, image: int) -> float:
-        """Keep the image on screen; centre it when it is smaller than the canvas."""
-        if image <= canvas:
-            return 0.0
-        limit = (image - canvas) / 2.0
-        return max(-limit, min(limit, pan))
+        return clamp_pan_value(pan, canvas, image)
 
     def max_zoom(self, disp_w: int, disp_h: int) -> float:
-        """Largest zoom relative to fit that respects MAX_VIEW_PIXELS."""
         canvas_w, canvas_h = self.canvas_size()
-        fit = max(min(canvas_w / disp_w, canvas_h / disp_h), 1e-3)
-        pixel_limit = math.sqrt(MAX_VIEW_PIXELS / max(disp_w * disp_h, 1)) / fit
-        return max(MIN_ZOOM, min(MAX_ZOOM, max(1.0, pixel_limit)))
+        return max_zoom_value(canvas_w, canvas_h, disp_w, disp_h)
 
     def render_background(self) -> None:
         if self.base_img is None or self.base_index is None:
@@ -1118,9 +985,9 @@ class SegmentGui(tk.Tk):
         self.disp_shape = (disp_h, disp_w)
 
         canvas_w, canvas_h = self.canvas_size()
-        fit_scale = max(min(canvas_w / disp_w, canvas_h / disp_h), 1e-3)
+        fit = fit_scale(canvas_w, canvas_h, disp_w, disp_h)
         self.zoom = max(MIN_ZOOM, min(self.zoom, self.max_zoom(disp_w, disp_h)))
-        scale = fit_scale * self.zoom
+        scale = fit * self.zoom
         out_w = max(1, int(disp_w * scale))
         out_h = max(1, int(disp_h * scale))
         self.display_scale = scale
@@ -1166,14 +1033,7 @@ class SegmentGui(tk.Tk):
 
     # --- display controls --------------------------------------------------- #
     def apply_contrast(self, arr: np.ndarray) -> np.ndarray:
-        """Window the 0-255 display values between contrast_min and contrast_max."""
-        lo, hi = self.contrast_min, self.contrast_max
-        if lo <= 0 and hi >= 255:
-            return arr
-        if hi <= lo:
-            hi = lo + 1
-        scaled = (arr.astype(np.float32) - lo) * (255.0 / (hi - lo))
-        return np.clip(scaled, 0, 255).astype(np.uint8)
+        return contrast_array(arr, self.contrast_min, self.contrast_max)
 
     def on_alpha_change(self, value: str) -> None:
         self.overlay_alpha = int(float(value))
@@ -1224,8 +1084,8 @@ class SegmentGui(tk.Tk):
 
         self.zoom = new_zoom
         canvas_w, canvas_h = self.canvas_size()
-        fit_scale = max(min(canvas_w / disp_w, canvas_h / disp_h), 1e-3)
-        new_scale = fit_scale * new_zoom
+        fit = fit_scale(canvas_w, canvas_h, disp_w, disp_h)
+        new_scale = fit * new_zoom
         out_w = max(1, int(disp_w * new_scale))
         out_h = max(1, int(disp_h * new_scale))
         self.pan_x = x - image_x * new_scale - (canvas_w - out_w) / 2.0
@@ -1399,7 +1259,7 @@ class SegmentGui(tk.Tk):
         self.stroke_before = None
         if before is not None:
             after = np.asarray(self.base_mask_img)
-            added, removed, bbox = self.mask_diff(before, after)
+            added, removed, bbox = diff_masks(before, after)
             if bbox is not None:
                 roi = next(
                     (item for item in self.rois if item.roi_id == self.stroke_roi_id),
@@ -1431,7 +1291,7 @@ class SegmentGui(tk.Tk):
         before = mask.copy()
         mask[labels == labels[row, col]] = value
         self.base_mask_img = Image.fromarray(mask)
-        added, removed, bbox = self.mask_diff(before, mask)
+        added, removed, bbox = diff_masks(before, mask)
         if bbox is not None:
             self.log_op(
                 "fill",
@@ -1458,7 +1318,7 @@ class SegmentGui(tk.Tk):
             return
         before = np.asarray(self.base_mask_img).copy()
         self.base_mask_img = self.undo_stack.pop()
-        added, removed, bbox = self.mask_diff(before, np.asarray(self.base_mask_img))
+        added, removed, bbox = diff_masks(before, np.asarray(self.base_mask_img))
         if bbox is not None:
             self.log_op(
                 "undo",
@@ -1483,7 +1343,7 @@ class SegmentGui(tk.Tk):
         before = np.asarray(self.base_mask_img).copy()
         self.push_undo("clear")
         self.base_mask_img.paste(0, (0, 0, self.base_mask_img.width, self.base_mask_img.height))
-        added, removed, bbox = self.mask_diff(before, np.asarray(self.base_mask_img))
+        added, removed, bbox = diff_masks(before, np.asarray(self.base_mask_img))
         if bbox is not None:
             self.log_op(
                 "clear",
@@ -1504,7 +1364,7 @@ class SegmentGui(tk.Tk):
         before = np.asarray(self.base_mask_img).copy()
         self.push_undo("morphology")
         self.base_mask_img = self.base_mask_img.filter(kernel)
-        added, removed, bbox = self.mask_diff(before, np.asarray(self.base_mask_img))
+        added, removed, bbox = diff_masks(before, np.asarray(self.base_mask_img))
         if bbox is not None:
             self.log_op(
                 "dilate" if grow else "erode",
@@ -1705,10 +1565,7 @@ class SegmentGui(tk.Tk):
         self.status_var.set("Saved")
 
     def write_csv(self) -> None:
-        output = self.records.copy()
-        output["flip"] = output["flip"].fillna("").astype(str)
-        output["rotation"] = output["rotation"].fillna(0).astype(int)
-        output.to_csv(self.csv_path, index=False)
+        write_records(self.csv_path, self.records)
 
     def commit_current(self) -> None:
         self.flush_slider_updates()

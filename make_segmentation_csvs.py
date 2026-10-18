@@ -23,27 +23,13 @@ from pathlib import Path
 import pandas as pd
 
 from common import normalize_flip, normalize_rotation
+from paths import TOOL_DIR, find_data_root
 
-TOOL_DIR = Path(__file__).resolve().parent
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 COLUMNS = [
     "group", "specimen", "species", "stain", "section",
     "base", "image", "segmentation", "flip", "rotation",
 ]
-
-
-def find_data_root(override: str | None) -> Path:
-    if override:
-        return Path(override).expanduser().resolve()
-    for parent in [TOOL_DIR, *TOOL_DIR.parents]:
-        for candidate in [
-            parent,
-            *sorted(parent.glob("brain_biodiversity_bank*")),
-            *sorted(parent.glob("brain_biodiversity_bank*/brain_biodiversity_bank")),
-        ]:
-            if (candidate / "v.1" / "sections").is_dir():
-                return candidate
-    raise SystemExit("Could not find the data root; pass --data-root /path/to/brain_biodiversity_bank")
 
 
 def is_section_image(path: Path) -> bool:
@@ -133,6 +119,8 @@ def main() -> None:
     args = parser.parse_args()
 
     data_root = find_data_root(args.data_root)
+    if data_root is None:
+        raise SystemExit("Could not find the data root; pass --data-root /path/to/brain_biodiversity_bank")
     version_dir = data_root / "v.1"
     csv_dir = Path(args.csv_dir).expanduser().resolve()
     seg_dir = Path(args.seg_dir).expanduser().resolve()
