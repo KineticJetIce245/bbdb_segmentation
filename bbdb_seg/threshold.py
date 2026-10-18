@@ -123,7 +123,7 @@ class ThresholdMixin:
         if self.last_action != "threshold":
             self.push_undo("threshold")
         before = np.asarray(self.base_mask_img).copy()
-        thresholded = np.asarray(self.threshold_mask())
+        thresholded = self.exclude_background(np.asarray(self.threshold_mask()))
         roi = self.active_roi()
         if roi is not None:
             after = before.copy()
