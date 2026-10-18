@@ -228,8 +228,18 @@ What this means for the threshold tool:
   pixels, snaps the boundary onto the strongest nearby image edge (a 3-px band,
   marker-controlled watershed: the outline can move up to that edge but never
   across it) and drops islands under 30 px. With an ROI active, only the ROI
-  changes. Check the result, then Ctrl+Z if you don't like it. Install
-  `scikit-image` for exact edge placement (otherwise a scipy fallback is used).
+  changes. **Your hand edits win:** pixels you painted with the brush or fill
+  bucket are never removed by Clean (unless they are background or legend),
+  and pixels you erased by hand are never added back. Check the result, then
+  Ctrl+Z if you don't like it. Install `scikit-image` for exact edge placement
+  (otherwise a scipy fallback is used).
+- **Exclude legend** (on by default): slide labels ("63-310", "#1650"), the
+  scale bar and the credit line are detected automatically (small separate
+  blobs in the top/bottom 20 % of the slide, not touching the section) and are
+  never selected.
+- **Smooth strokes** (on by default): brush strokes follow the pointer with a
+  stabiliser that irons out hand jitter (the line catches up to where you
+  release), and lasso outlines are rounded before becoming an ROI.
 - **Overlay opacity** and **contrast** sliders change only what you see on
   screen.
 - Every mask-changing operation and every ROI action is appended to
@@ -248,7 +258,8 @@ bbdb_seg/                       # Python package (implementation)
   session.py                    # image/mask loading, saving and queue I/O
   status.py                     # manual segmented status and stop autolog
   clean.py                      # background detection, edge snapping, island removal (pure)
-  cleaning.py                   # Exclude background / Clean (k) GUI glue
+  cleaning.py                   # Exclude background/legend, Clean (k) GUI glue, hand-edit memory
+  smoothing.py                  # brush stabiliser and lasso (Chaikin) smoothing
   work_queue.py                 # CSV selection and work-queue refresh
   threshold.py                  # threshold range, Invert, slider coalescing
   brush_select.py               # brush-shaped ROI gesture and blue transition
@@ -495,7 +506,7 @@ The status bar shows:
 | `Ctrl+Z` / `u` | Undo the last mask change                      |
 | `c`            | Clear the whole mask                           |
 | `E` / `D`      | Erode / dilate the mask by one pixel           |
-| `k`            | Clean: drop background, snap edges, remove specks |
+| `k`            | Clean: drop background/legend, snap edges, remove specks (keeps your brush strokes) |
 | `[` / `]`      | Smaller / larger brush                         |
 | `+` / `=` / `-` | Zoom in / out at the mouse pointer            |
 | `0`            | Fit the image to the window                    |

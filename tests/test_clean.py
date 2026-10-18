@@ -7,8 +7,9 @@ import numpy as np
 from scipy import ndimage
 
 import bbdb_seg.clean as clean_module
-from bbdb_seg.clean import background_mask, clean_mask, remove_small_islands, snap_to_edges
+from bbdb_seg.clean import background_mask, clean_mask, legend_mask, remove_small_islands, snap_to_edges
 from bbdb_seg.cleaning import CleanMixin
+from bbdb_seg.smoothing import StrokeSmoothMixin, chaikin
 
 
 def ring_image(background: int = 255, tissue: int = 200, cortex: int = 120) -> tuple[np.ndarray, np.ndarray]:
@@ -88,6 +89,7 @@ class _FakeGui(CleanMixin):
         from PIL import Image
         self.base_mask_img = Image.fromarray(mask.astype(np.uint8) * 255)
         self.exclude_bg_var = _Var(True)
+        self.exclude_legend_var = _Var(True)
         self.status_var = _Var("")
         self.status_var.set = lambda v: setattr(self.status_var, "value", v)
         self.undo_stack, self.ops, self.roi = [], [], None
@@ -117,6 +119,86 @@ class CleanMixinTests(unittest.TestCase):
         self.assertTrue(gui.exclude_background(full)[60, 60])  # tissue kept
         gui.exclude_bg_var = _Var(False)
         self.assertTrue(gui.exclude_background(full)[0, 0])    # off = untouched
+
+
+def slide_with_legend() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """White slide, a big tissue blob, dark 'labels' in the top/bottom margins."""
+    img = np.full((400, 480), 255, np.uint8)   # ~ BBDB slide size / 2
+    yy, xx = np.mgrid[:400, :480]
+    tissue = np.hypot(yy - 200, xx - 240) < 110
+    img[tissue] = 150
+    legend = np.zeros(img.shape, bool)
+    for r0, c0, h, w in ((10, 12, 14, 34), (10, 400, 14, 44), (360, 12, 3, 70), (372, 300, 6, 120)):
+        legend[r0:r0 + h, c0:c0 + w] = True
+    img[legend] = 20
+    return img, tissue, legend
+
+
+class LegendTests(unittest.TestCase):
+    def test_labels_detected_tissue_untouched(self) -> None:
+        img, tissue, legend = slide_with_legend()
+        found = legend_mask(img)
+        self.assertTrue(found[legend].all())
+        self.assertFalse(found[tissue].any())
+
+    def test_blob_outside_margins_is_not_legend(self) -> None:
+        img, tissue, _legend = slide_with_legend()
+        img[195:205, 5:12] = 20          # small fragment at mid-height: keep it
+        self.assertFalse(legend_mask(img)[195:205, 5:12].any())
+
+
+class HandEditTests(unittest.TestCase):
+    def test_clean_keeps_brush_strokes_and_erasures(self) -> None:
+        img, ring = ring_image()
+        rough = ndimage.binary_dilation(ring, iterations=2)
+        gui = _FakeGui(img, rough)
+        before = np.asarray(gui.base_mask_img).copy()
+        # hand-paint a 3 px tab into the tissue interior (not cortex-like): Clean
+        # would snap it away, but a deliberate stroke must survive
+        painted = before.copy()
+        painted[58:61, 22:34] = 255
+        stroke = np.zeros(before.shape, bool); stroke[58:61, 22:34] = True
+        gui.record_hand_edit(before, painted, "draw", footprint=stroke)
+        # hand-erase a chunk of the ring: Clean must not add it back
+        erased = painted.copy()
+        erased[55:65, 95:101] = 0
+        gui.record_hand_edit(painted, erased, "erase")
+        from PIL import Image
+        gui.base_mask_img = Image.fromarray(erased)
+        gui.clean_current()
+        after = np.asarray(gui.base_mask_img) > 0
+        self.assertTrue(after[58:61, 22:34].all())
+        self.assertFalse(after[55:65, 95:101].any())
+
+    def test_undo_clears_stale_erasures(self) -> None:
+        img, ring = ring_image()
+        gui = _FakeGui(img, ring)
+        before = np.asarray(gui.base_mask_img).copy()
+        erased = before.copy(); erased[55:65, 95:101] = 0
+        gui.record_hand_edit(before, erased, "erase")
+        gui.on_mask_restored()            # mask still has the ring (as after an undo)
+        self.assertFalse(gui.hand_erase[55:65, 95:101].any())
+
+
+class SmoothingTests(unittest.TestCase):
+    def test_stabiliser_lags_and_can_be_disabled(self) -> None:
+        class S(StrokeSmoothMixin):
+            smooth_var = _Var(True)
+        s = S(); s.reset_smoothing()
+        self.assertEqual(s.smooth_point((0, 0)), (0, 0))
+        r, c = s.smooth_point((0, 100))
+        self.assertTrue(0 < c < 100)                  # follows, but lags the pointer
+        s.smooth_var = _Var(False); s.reset_smoothing()
+        s.smooth_point((0, 0))
+        self.assertEqual(s.smooth_point((0, 100)), (0, 100))
+
+    def test_chaikin_rounds_corners(self) -> None:
+        square = [(0, 0), (0, 40), (40, 40), (40, 0)]
+        out = chaikin(square, iterations=2)
+        self.assertGreater(len(out), len(square))
+        self.assertNotIn((0, 0), out)                 # sharp corner cut off
+        rows = [p[0] for p in out]; cols = [p[1] for p in out]
+        self.assertTrue(min(rows) >= 0 and max(rows) <= 40 and min(cols) >= 0 and max(cols) <= 40)
 
 
 if __name__ == "__main__":
