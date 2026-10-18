@@ -39,7 +39,10 @@ class ToolsMixin:
     def set_tool(self, tool: str) -> None:
         self.tool = tool
         self.update_mode_label()
-        self.canvas.configure(cursor="crosshair" if tool == "fill" else "")
+        self.canvas.configure(cursor="crosshair" if tool in ("fill", "select") else "")
+        if tool != "select":
+            self.reset_brush_erase()
+            self.reset_brush_select()
         if tool == "fill":
             self.on_leave(None)
 
@@ -52,6 +55,9 @@ class ToolsMixin:
     def toggle_fill(self) -> None:
         self.set_tool("draw" if self.tool == "fill" else "fill")
 
+    def toggle_brush_select(self) -> None:
+        self.set_tool("draw" if self.tool == "select" else "select")
+
     def update_brush_label(self) -> None:
         self.brush_var.set(f"brush: {self.brush}px")
         self.brush_input_var.set(str(self.brush))
@@ -61,7 +67,10 @@ class ToolsMixin:
 
     def update_cursor(self, x: int, y: int, erase: bool) -> None:
         radius = self.brush
-        colour = "#ff4040" if erase else "#ffff40"
+        if self.tool == "select":
+            colour = "#00b7ff"
+        else:
+            colour = "#ff4040" if erase else "#ffff40"
         if self.cursor_id is None:
             self.cursor_id = self.canvas.create_oval(0, 0, 0, 0, outline=colour, width=2)
         self.canvas.coords(self.cursor_id, x - radius, y - radius, x + radius, y + radius)

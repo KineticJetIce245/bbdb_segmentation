@@ -11,9 +11,11 @@ Features
   * Two threshold sliders select the intensity range ``min <= value <= max``.
     "Invert" selects pixels outside that range instead. The initial range is
     picked from the Otsu level and the image border (dark or bright background).
-  * Rectangular ROIs (Shift+drag), each with its own threshold settings. An
-    active ROI limits threshold changes to its rectangle; outside pixels are
-    preserved. Shift+click activates a ROI; Backspace deletes it.
+  * Rectangular (Shift+left-drag), lasso (Shift+right-drag) and brush-shaped
+    (L, then left-drag) ROIs, each with its own threshold settings. An active
+    ROI limits threshold changes to its shape; outside pixels are preserved.
+    Shift+click activates a ROI; Backspace deletes it. In brush-select mode,
+    right-drag erases part of the active brush ROI.
   * Every mask/ROI operation is appended to ``<mask>.ops.jsonl``. PNG masks are
     written on Enter, s, q or when switching sections, not on every edit.
   * Paint (left drag) / erase (right drag), clear, erode, dilate.
@@ -39,6 +41,9 @@ import numpy as np
 from PIL import Image
 
 from .session import IOMixin
+from .brush_erase import BrushEraseMixin
+from .brush_select import BrushSelectMixin
+from .lasso import LassoMixin
 from .painting import PaintMixin
 from .work_queue import QueueMixin
 from .rendering import RenderMixin
@@ -55,7 +60,7 @@ from .settings import (
 )
 
 
-class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, PaintMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
+class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, PaintMixin, BrushSelectMixin, BrushEraseMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
     def __init__(
         self,
         csv_path: Path | None,
@@ -78,6 +83,7 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, PaintMixin, Tool
 
         self._init_document_state()
         self._init_edit_state()
+        self._init_brush_select_state()
         self._init_view_state()
         self._init_tk_vars()
         self._init_window()
@@ -117,6 +123,10 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, PaintMixin, Tool
         self.roi_drag_start: tuple[int, int] | None = None
         self.roi_dragging = False
         self.roi_drag_moved = False
+        self.lasso_dragging = False
+        self.lasso_points: list[tuple[int, int]] = []
+        self.lasso_item: int | None = None
+        self.lasso_moved = False
         self.stroke_before: np.ndarray | None = None
         self.stroke_op = "draw"
         self.stroke_roi_id: int | None = None
@@ -129,6 +139,22 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, PaintMixin, Tool
         self.mask_dirty = False
         self.mask_source = ""
         self.last_pt: tuple[int, int] | None = None
+
+    def _init_brush_select_state(self) -> None:
+        self.brush_select_dragging = False
+        self.brush_select_mask: np.ndarray | None = None
+        self.brush_select_points: list[tuple[int, int]] = []
+        self.brush_select_items: list[int] = []
+        self.brush_select_last: tuple[int, int] | None = None
+        self.brush_select_target_id: int | None = None
+        self.brush_select_after_id: str | None = None
+        self.brush_preview_item: int | None = None
+        self.brush_preview_photo: ImageTk.PhotoImage | None = None
+        self.brush_erase_dragging = False
+        self.brush_erase_roi_id: int | None = None
+        self.brush_erase_before: np.ndarray | None = None
+        self.brush_erase_last: tuple[int, int] | None = None
+        self.brush_erase_changed = False
 
     def _init_view_state(self) -> None:
         self.disp_index: np.ndarray | None = None
@@ -145,6 +171,7 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, PaintMixin, Tool
         self.ov_photo: ImageTk.PhotoImage | None = None
         self.bg_id: int | None = None
         self.ov_id: int | None = None
+        self.roi_photos: list[ImageTk.PhotoImage] = []
         self.cursor_id: int | None = None
         self.resize_after_id: str | None = None
         self.pending_save_id: str | None = None
@@ -211,6 +238,8 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, PaintMixin, Tool
             self.toggle_erase()
         elif char == "f":
             self.toggle_fill()
+        elif char == "l":
+            self.toggle_brush_select()
         elif char == "u":
             self.undo()
         elif char == "s":

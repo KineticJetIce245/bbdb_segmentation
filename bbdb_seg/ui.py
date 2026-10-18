@@ -39,6 +39,7 @@ class UiMixin:
         self.mode_button = ttk.Button(toolbar, text="Mode: Draw", width=12, command=self.cycle_tool)
         self.mode_button.pack(side="left")
         ttk.Button(toolbar, text="Fill (f)", command=lambda: self.set_tool("fill")).pack(side="left", padx=(2, 0))
+        ttk.Button(toolbar, text="Brush select (L)", command=lambda: self.set_tool("select")).pack(side="left", padx=(2, 0))
         ttk.Button(toolbar, text="Undo (Ctrl+Z)", command=self.undo).pack(side="left", padx=(2, 0))
         ttk.Button(toolbar, text="Clear mask", command=self.clear_mask).pack(side="left", padx=(2, 10))
 
@@ -136,6 +137,9 @@ class UiMixin:
         self.canvas.bind("<Shift-ButtonPress-1>", self.start_roi_select)
         self.canvas.bind("<Shift-B1-Motion>", self.drag_roi_select)
         self.canvas.bind("<Shift-ButtonRelease-1>", self.end_roi_select)
+        self.canvas.bind("<Shift-ButtonPress-3>", self.start_lasso_select)
+        self.canvas.bind("<Shift-B3-Motion>", self.drag_lasso_select)
+        self.canvas.bind("<Shift-ButtonRelease-3>", self.end_lasso_select)
         self.canvas.bind("<ButtonPress-3>", lambda e: self.on_press(e, right=True))
         self.canvas.bind("<B3-Motion>", lambda e: self.on_drag(e, right=True))
         self.canvas.bind("<ButtonRelease-3>", self.end_stroke)
@@ -166,9 +170,9 @@ class UiMixin:
         help_text = (
             "Enter: accept & next    Left/Right: section    t: Otsu    i: invert    "
             "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase\n"
-            "f: fill    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    brush box: type px    s: save    "
+            "f: fill    L: brush selection    Right-drag in Brush select: erase selection    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    brush box: type px    s: save    "
             "Wheel: zoom    Shift+Wheel: brush    +/-: zoom    0: fit    Middle/Ctrl-drag: pan    Esc/q: quit\n"
-            "Shift-drag: new ROI    Shift-click: activate/clear ROI    Backspace/Delete: delete ROI\n"
+            "Shift+left-drag: rectangle ROI    Shift+right-drag: lasso ROI    Shift-click: activate/clear ROI    Backspace/Delete: delete ROI\n"
             "(moving the threshold sliders replaces hand edits)"
         )
         ttk.Label(self, text=help_text, padding=(8, 2)).grid(row=4, column=0, sticky="w")

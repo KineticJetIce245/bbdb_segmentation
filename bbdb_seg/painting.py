@@ -27,13 +27,22 @@ class PaintMixin:
         self.flush_slider_updates()
         self.canvas.focus_set()
         if event.state & SHIFT_MASK:
-            self.start_roi_select(event)
+            if right:
+                self.start_lasso_select(event)
+            else:
+                self.start_roi_select(event)
             return
         if event.state & CONTROL_MASK:
             self.start_pan(event)
             return
         if self.tool == "fill":
             self.bucket_fill(event, 0 if right else 255)
+            return
+        if self.tool == "select":
+            if right:
+                self.start_brush_erase(event)
+            else:
+                self.start_brush_select(event)
             return
         self.last_pt = None
         self.stroke_pushed = False
@@ -43,11 +52,23 @@ class PaintMixin:
         self.continue_stroke(event, right or self.tool == "erase")
 
     def on_drag(self, event: tk.Event, right: bool) -> None:
+        if self.brush_erase_dragging:
+            self.drag_brush_erase(event)
+            return
+        if self.brush_select_dragging:
+            self.drag_brush_select(event)
+            return
+        if self.lasso_dragging:
+            self.drag_lasso_select(event)
+            return
         if self.roi_dragging:
             self.drag_roi_select(event)
             return
         if event.state & SHIFT_MASK:
-            self.start_roi_select(event)
+            if right:
+                self.drag_lasso_select(event)
+            else:
+                self.drag_roi_select(event)
             return
         if self.panning:
             self.pan_drag(event)
@@ -82,6 +103,18 @@ class PaintMixin:
             self.schedule_slider_update("overlay")
 
     def end_stroke(self, _event: tk.Event | None = None) -> None:
+        if self.brush_erase_dragging:
+            if _event is not None:
+                self.end_brush_erase(_event)
+            return
+        if self.brush_select_dragging:
+            if _event is not None:
+                self.end_brush_select(_event)
+            return
+        if self.lasso_dragging:
+            if _event is not None:
+                self.end_lasso_select(_event)
+            return
         if self.roi_dragging:
             if _event is not None:
                 self.end_roi_select(_event)

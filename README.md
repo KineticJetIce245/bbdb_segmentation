@@ -190,16 +190,22 @@ What this means for the threshold tool:
   and whether the border is dark or bright.
 - **Invert** selects pixels *outside* the range instead. It starts off; the
   initial range already selects the non-background side.
-- **Shift+left-drag** creates a rectangular selection (ROI). You can create
-  several. **Shift+click** inside an ROI activates it; **Shift+click** outside
-  clears the active ROI; **Backspace** / **Delete** removes the active ROI.
-  Each ROI remembers its own threshold range and Invert setting. With an active
-  ROI, the threshold sliders only rewrite pixels inside that ROI; the rest of
-  the mask is preserved.
+- **Shift+left-drag** creates a rectangular selection (ROI);
+  **Shift+right-drag** draws a freehand lasso ROI. You can create several of
+  either kind. **Shift+click** inside an ROI activates it; **Shift+click**
+  outside clears the active ROI; **Backspace** / **Delete** removes the active
+  ROI. Each ROI remembers its own threshold range and Invert setting. With an
+  active ROI, the threshold sliders only rewrite pixels inside that ROI; the
+  rest of the mask is preserved.
 - You can **draw** and **erase** with the brush, **clear** the mask, or
   **erode** / **dilate** it by one pixel. Brush size can be changed with the
   wheel, `[` / `]`, the Brush ± buttons, or by typing a pixel value directly
   into the toolbar box (2–120 px).
+- Press **L** for **brush selection**: left-drag paints a blue region. On
+  release it becomes a blue outline, then a normal ROI. Threshold changes then
+  apply only inside that brush ROI. Several strokes extend the same brush ROI
+  instead of creating a pile of separate selections; right-drag erases part of
+  the active brush ROI.
 - A **paint bucket** fills a connected region of the mask in one click, for
   example a hole inside the tissue. Right-click with the bucket empties a
   region instead.
@@ -228,7 +234,9 @@ bbdb_seg/                       # Python package (implementation)
   session.py                    # image/mask loading, saving and status
   work_queue.py                 # CSV selection and work-queue refresh
   threshold.py                  # threshold range, Invert, slider coalescing
-  selection.py                  # ROI selection, activation and drawing
+  brush_select.py               # brush-shaped ROI gesture and blue transition
+  selection.py                  # rectangular ROI selection and drawing
+  lasso.py                      # freehand lasso ROI gesture
   painting.py                   # brush/fill/undo/morphology and transforms
   tools.py                      # brush size, tool mode and cursor
   rendering.py                  # canvas rendering, zoom and pan
@@ -435,8 +443,9 @@ The status bar shows:
   Otsu-based band: `0–Otsu` if the image border is bright (dark tissue on a
   light background), or `Otsu–255` if the border is dark. **Invert** starts
   unchecked, and no ROI is active.
-- **Shift+left-drag** creates a rectangular ROI. It does **not** change the
-  mask; it only becomes the target for later threshold changes.
+- **Shift+left-drag** creates a rectangular ROI; **Shift+right-drag** draws a
+  freehand polygon (lasso) ROI. Neither changes the mask; they only become the
+  target for later threshold changes.
 - With an ROI active, dragging either slider **rebuilds the mask only inside
   that ROI**. Pixels inside `min <= value <= max` become `1`; pixels outside the
   range become `0`. The rest of the mask is left untouched. With **Invert**
@@ -468,6 +477,7 @@ The status bar shows:
 | `h` / `v`      | Flip horizontal / vertical                     |
 | `e`            | Toggle the brush between draw and erase        |
 | `f`            | Toggle the paint bucket (fill)                 |
+| `l`            | Toggle brush selection                         |
 | `Ctrl+Z` / `u` | Undo the last mask change                      |
 | `c`            | Clear the whole mask                           |
 | `E` / `D`      | Erode / dilate the mask by one pixel           |
@@ -475,6 +485,7 @@ The status bar shows:
 | `+` / `=` / `-` | Zoom in / out at the mouse pointer            |
 | `0`            | Fit the image to the window                    |
 | Shift + left-drag | Create a rectangular ROI                     |
+| Shift + right-drag | Create a freehand lasso ROI                  |
 | Shift + left-click | Activate an ROI / clear the active ROI     |
 | `Backspace` / `Delete` | Delete the active ROI                  |
 | `s`            | Save the current mask now (PNG)                |
@@ -485,9 +496,12 @@ The status bar shows:
 | Action              | Effect                                             |
 | ------------------- | -------------------------------------------------- |
 | Left-click / drag   | Paint the mask (or erase if Mode is set to Erase)  |
-| Right-click / drag  | Erase the mask (always)                            |
+| Right-click / drag  | Erase mask; in Brush select, erase the brush ROI   |
 | Shift + left-drag   | Create a rectangular ROI                           |
+| Shift + right-drag  | Create a freehand lasso ROI                        |
 | Shift + left-click  | Activate an ROI / clear the active ROI             |
+| Left-click (Brush select) | Paint a brush-shaped ROI                    |
+| Right-click (Brush select) | Erase part of the brush-shaped ROI          |
 | Left-click (Fill)   | Fill the connected region under the cursor         |
 | Right-click (Fill)  | Empty the connected region under the cursor        |
 | Mouse wheel         | Zoom in / out at the pointer                       |
@@ -526,10 +540,14 @@ values, or the saved mask. Zoom and pan also change only the view.
    with its Otsu range.
 2. Adjust **Threshold min** / **Threshold max** (and **Invert** if needed) until
    the mask is as close to the cerebral cortex as possible.
-3. For local corrections, **Shift+left-drag** a ROI first. Threshold changes
-   then only affect that ROI; other regions keep their current mask. Each ROI
-   keeps its own threshold settings. **Shift+click** an ROI to switch to it,
-   **Backspace** to delete the active one.
+3. For local corrections, **Shift+left-drag** a rectangle or
+   **Shift+right-drag** a freehand lasso ROI first. Threshold changes then only
+   affect that ROI; other regions keep their current mask. Each ROI keeps its
+   own threshold settings. **Shift+click** an ROI to switch to it,
+   **Backspace** to delete the active one. For a quick local touch-up, press
+   **L** and paint a brush ROI; several strokes keep extending the same
+   selection, and right-drag erases part of it. It turns from blue fill to a
+   blue outline to a normal ROI, and threshold changes then apply only inside it.
 4. Fix the rest by hand. Erase the white matter, cerebellum, brainstem and any
    text. Left-drag adds to the mask, right-drag removes from it, the **Fill**
    bucket fills holes, and `E`/`D` trims or grows the edges. Use **Undo**
@@ -557,7 +575,8 @@ values, or the saved mask. Zoom and pan also change only the view.
   threshold changes, brush strokes, fill, clear, erode/dilate, undo and view
   transforms. Each record contains:
   - `op`, `roi_id`, `roi` (`[top, left, bottom, right]`, bottom/right
-    exclusive), `roi_threshold`, `threshold`;
+    exclusive), `roi_shape`, `roi_points` (lasso vertices), `roi_threshold`,
+    `threshold`;
   - `added` / `removed` pixel counts and the changed `bbox` for mask-changing
     operations;
   - the section name, image path, mask path and an ISO timestamp.

@@ -57,7 +57,12 @@ class IOMixin:
         self.roi_dragging = False
         self.roi_drag_start = None
         self.roi_drag_moved = False
+        self.lasso_dragging = False
+        self.lasso_points = []
+        self.lasso_moved = False
         self.stroke_before = None
+        self.reset_brush_erase()
+        self.reset_brush_select(render=False)
         self.clear_roi_items()
 
     def _set_initial_threshold_band(self, base_img: np.ndarray) -> None:
@@ -125,6 +130,12 @@ class IOMixin:
             "op": op,
             "roi_id": roi.roi_id if roi is not None else None,
             "roi": roi.bbox if roi is not None else None,
+            "roi_shape": roi.shape if roi is not None else None,
+            "roi_points": (
+                [[row, col] for row, col in roi.points]
+                if roi is not None and roi.points is not None
+                else None
+            ),
             "roi_threshold": (
                 self._threshold_payload(
                     roi,
