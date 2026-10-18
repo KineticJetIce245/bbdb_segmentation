@@ -772,6 +772,9 @@ The GUI needs a display. Run it locally, or use `ssh -X` or a remote desktop.
 - Zoom and pan also change only the display. The brush and cursor are mapped
   through the current view transform, so the saved mask is unaffected by the
   zoom level or scroll position.
+- The red overlay is rebuilt only for the visible canvas area. At high zoom the
+  full magnified overlay would be many times larger than the window; clipping it
+  keeps painting responsive.
 - The recorded flip/rotation can be applied to both the image and the mask in a
   later processing step.
 

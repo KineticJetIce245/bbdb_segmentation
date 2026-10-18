@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import tkinter as tk
 
 import numpy as np
@@ -75,17 +76,40 @@ class RenderMixin:
         disp_mask = apply_transform(mask_np, self.flip, self.rotation)
         out_w = max(1, int(self.disp_shape[1] * self.display_scale))
         out_h = max(1, int(self.disp_shape[0] * self.display_scale))
-        stencil = Image.fromarray(disp_mask, "L").resize((out_w, out_h), NEAREST)
-        rgba = Image.new("RGBA", (out_w, out_h), (0, 0, 0, 0))
-        rgba.paste(Image.new("RGBA", (out_w, out_h), (255, 40, 40, self.overlay_alpha)), (0, 0), stencil)
-        self.ov_photo = ImageTk.PhotoImage(rgba)
-
         offset_x, offset_y = self.display_offset
+        canvas_w, canvas_h = self.canvas_size()
+
+        # Only build the part of the overlay that can be seen. At high zoom the
+        # full RGBA image can be tens of times larger than the canvas.
+        left = max(0, int(math.floor(-offset_x)))
+        top = max(0, int(math.floor(-offset_y)))
+        right = min(out_w, int(math.ceil(canvas_w - offset_x)))
+        bottom = min(out_h, int(math.ceil(canvas_h - offset_y)))
+        if right <= left or bottom <= top:
+            if self.ov_id is not None:
+                self.canvas.itemconfigure(self.ov_id, state="hidden")
+            return
+
+        stencil_full = Image.fromarray(disp_mask, "L").resize((out_w, out_h), NEAREST)
+        stencil = stencil_full.crop((left, top, right, bottom))
+        rgba = Image.new("RGBA", stencil.size, (0, 0, 0, 0))
+        rgba.paste(
+            Image.new("RGBA", stencil.size, (255, 40, 40, self.overlay_alpha)),
+            (0, 0),
+            stencil,
+        )
+        self.ov_photo = ImageTk.PhotoImage(rgba)
+        place_x = offset_x + left
+        place_y = offset_y + top
         if self.ov_id is None:
-            self.ov_id = self.canvas.create_image(offset_x, offset_y, anchor="nw", image=self.ov_photo)
+            self.ov_id = self.canvas.create_image(
+                place_x, place_y, anchor="nw", image=self.ov_photo
+            )
         else:
-            self.canvas.itemconfigure(self.ov_id, image=self.ov_photo)
-            self.canvas.coords(self.ov_id, offset_x, offset_y)
+            self.canvas.itemconfigure(
+                self.ov_id, image=self.ov_photo, state="normal"
+            )
+            self.canvas.coords(self.ov_id, place_x, place_y)
         self.canvas.tag_raise(self.ov_id)
         for item in self.roi_items:
             self.canvas.tag_raise(item)
@@ -226,12 +250,13 @@ class RenderMixin:
         )
         if self.bg_id is not None:
             self.canvas.move(self.bg_id, move_x, move_y)
-        if self.ov_id is not None:
-            self.canvas.move(self.ov_id, move_x, move_y)
         for item in self.roi_items:
             self.canvas.move(item, move_x, move_y)
         if self.roi_drag_item is not None:
             self.canvas.move(self.roi_drag_item, move_x, move_y)
+        # The overlay is viewport-cropped, so it has to be rebuilt at the new
+        # offset instead of moving the old cropped image.
+        self.render_overlay()
 
     def end_pan(self, _event: tk.Event | None = None) -> None:
         if not self.panning:
