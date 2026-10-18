@@ -27,43 +27,51 @@ class UiMixin:
         self.update_mode_label()
 
     def _build_toolbar(self, toolbar: ttk.Frame) -> None:
-        ttk.Button(toolbar, text="< Prev", command=lambda: self.move(-1)).pack(side="left")
-        ttk.Button(toolbar, text="Next >", command=lambda: self.move(1)).pack(side="left", padx=(2, 10))
+        top_row = ttk.Frame(toolbar)
+        top_row.pack(side="top", fill="x")
+        bottom_row = ttk.Frame(toolbar)
+        bottom_row.pack(side="top", fill="x", pady=(4, 0))
+        self._build_toolbar_actions(top_row)
+        self._build_toolbar_brush(bottom_row)
 
-        ttk.Button(toolbar, text="Rotate -90", command=lambda: self.rotate(-1)).pack(side="left")
-        ttk.Button(toolbar, text="Rotate +90", command=lambda: self.rotate(1)).pack(side="left", padx=(2, 10))
+    def _build_toolbar_actions(self, row: ttk.Frame) -> None:
+        ttk.Button(row, text="< Prev", command=lambda: self.move(-1)).pack(side="left")
+        ttk.Button(row, text="Next >", command=lambda: self.move(1)).pack(side="left", padx=(2, 10))
 
-        ttk.Button(toolbar, text="Flip H", command=self.flip_h).pack(side="left")
-        ttk.Button(toolbar, text="Flip V", command=self.flip_v).pack(side="left", padx=(2, 10))
+        ttk.Button(row, text="Rotate -90", command=lambda: self.rotate(-1)).pack(side="left")
+        ttk.Button(row, text="Rotate +90", command=lambda: self.rotate(1)).pack(side="left", padx=(2, 10))
 
-        self.mode_button = ttk.Button(toolbar, text="Mode: Draw", width=12, command=self.cycle_tool)
+        ttk.Button(row, text="Flip H", command=self.flip_h).pack(side="left")
+        ttk.Button(row, text="Flip V", command=self.flip_v).pack(side="left", padx=(2, 10))
+
+        self.mode_button = ttk.Button(row, text="Mode: Draw", width=12, command=self.cycle_tool)
         self.mode_button.pack(side="left")
-        ttk.Button(toolbar, text="Fill (f)", command=lambda: self.set_tool("fill")).pack(side="left", padx=(2, 0))
-        ttk.Button(toolbar, text="Brush select (L)", command=lambda: self.set_tool("select")).pack(side="left", padx=(2, 0))
-        ttk.Button(toolbar, text="Undo (Ctrl+Z)", command=self.undo).pack(side="left", padx=(2, 0))
-        ttk.Button(toolbar, text="Clear mask", command=self.clear_mask).pack(side="left", padx=(2, 10))
+        ttk.Button(row, text="Fill (f)", command=lambda: self.set_tool("fill")).pack(side="left", padx=(2, 0))
+        ttk.Button(row, text="Brush select (L)", command=lambda: self.set_tool("select")).pack(side="left", padx=(2, 0))
+        ttk.Button(row, text="Undo (Ctrl+Z)", command=self.undo).pack(side="left", padx=(2, 0))
+        ttk.Button(row, text="Clear mask", command=self.clear_mask).pack(side="left", padx=(2, 10))
 
-        ttk.Button(toolbar, text="Erode (E)", command=self.erode_mask).pack(side="left")
-        ttk.Button(toolbar, text="Dilate (D)", command=self.dilate_mask).pack(side="left", padx=(2, 10))
+    def _build_toolbar_brush(self, row: ttk.Frame) -> None:
+        ttk.Button(row, text="Erode (E)", command=self.erode_mask).pack(side="left")
+        ttk.Button(row, text="Dilate (D)", command=self.dilate_mask).pack(side="left", padx=(2, 14))
 
-        ttk.Button(toolbar, text="Brush -", command=lambda: self.change_brush(-2)).pack(side="left")
-        ttk.Label(toolbar, text="Brush:").pack(side="left", padx=(6, 2))
+        ttk.Button(row, text="Brush -", command=lambda: self.change_brush(-2)).pack(side="left")
+        ttk.Label(row, text="Brush:").pack(side="left", padx=(6, 2))
         self.brush_spin = ttk.Spinbox(
-            toolbar, from_=MIN_BRUSH, to=MAX_BRUSH, increment=1, width=4,
+            row, from_=MIN_BRUSH, to=MAX_BRUSH, increment=1, width=4,
             textvariable=self.brush_input_var, command=self.on_brush_entry,
         )
         self.brush_spin.pack(side="left")
         self.brush_spin.bind("<Return>", self.on_brush_entry)
         self.brush_spin.bind("<KP_Enter>", self.on_brush_entry)
         self.brush_spin.bind("<FocusOut>", self.on_brush_entry)
-        ttk.Label(toolbar, text="px").pack(side="left", padx=(2, 0))
-        ttk.Button(toolbar, text="Brush +", command=lambda: self.change_brush(2)).pack(side="left", padx=(4, 10))
+        ttk.Label(row, text="px").pack(side="left", padx=(2, 0))
+        ttk.Button(row, text="Brush +", command=lambda: self.change_brush(2)).pack(side="left", padx=(4, 14))
 
-        ttk.Button(toolbar, text="Accept & next (Enter)", command=self.accept_and_next).pack(side="left")
-        self.done_label = tk.Label(toolbar, textvariable=self.done_var, font=("TkDefaultFont", 10, "bold"))
-        self.done_label.pack(side="left", padx=(8, 0))
-
-        ttk.Label(toolbar, textvariable=self.status_var).pack(side="right")
+        ttk.Button(row, text="Accept & next (Enter)", command=self.accept_and_next).pack(side="left")
+        self.done_label = tk.Label(row, textvariable=self.done_var, font=("TkDefaultFont", 10, "bold"))
+        self.done_label.pack(side="left", padx=(8, 8))
+        ttk.Label(row, textvariable=self.status_var).pack(side="right")
 
     def _build_controls(self, controls: ttk.Frame) -> None:
         threshold_row = ttk.Frame(controls)

@@ -416,8 +416,8 @@ switches to the first unfinished one.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Undo  Clear  Erode/Dilate │ toolbar
-│ Brush ±  Brush: [14] px  Accept & next (Enter)  ● segmented / ○ not saved  │
+│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Brush select  Undo  Clear │ toolbar row 1
+│ Erode/Dilate  Brush ±  Brush: [14] px  Accept & next (Enter)  ● segmented  │ toolbar row 2
 ├──────────────────────────────────────────────────────────────────────────┤
 │ Threshold min [====]  max [====]  Otsu  ☐ Invert  Otsu: 214  Opacity  Contrast … │ sliders
 │ Contrast …  Auto  Reset  ☐ Review finished                                  │ controls

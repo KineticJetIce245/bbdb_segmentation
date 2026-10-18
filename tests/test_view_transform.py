@@ -738,6 +738,12 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.app.on_key(make_event(keysym="l", char="l"))
         self.assertEqual(self.app.tool, "draw")
 
+    def test_toolbar_is_split_into_two_rows(self) -> None:
+        toolbar = self.app.grid_slaves(row=0, column=0)[0]
+        rows = toolbar.winfo_children()
+        self.assertEqual(len(rows), 2)
+        self.assertLessEqual(toolbar.winfo_reqwidth(), 1450)
+
     def test_review_finished_checkbox_rebuilds_queue(self) -> None:
         # Add a second pending section to the in-memory records.
         extra = self.app.records.iloc[0].copy()
