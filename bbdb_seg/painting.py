@@ -127,6 +127,12 @@ class PaintMixin:
         before = self.stroke_before
         self.stroke_before = None
         if before is not None:
+            if self.stroke_op == "draw":
+                painted = np.asarray(self.base_mask_img)
+                kept = self.exclude_background(painted)
+                if not np.array_equal(kept, painted):
+                    self.base_mask_img = Image.fromarray(kept)
+                    self.render_overlay()
             after = np.asarray(self.base_mask_img)
             added, removed, bbox = diff_masks(before, after)
             if bbox is not None:
@@ -159,6 +165,8 @@ class PaintMixin:
         self.push_undo("fill")
         before = mask.copy()
         mask[labels == labels[row, col]] = value
+        if value:
+            mask = self.exclude_background(mask)
         self.base_mask_img = Image.fromarray(mask)
         added, removed, bbox = diff_masks(before, mask)
         if bbox is not None:
