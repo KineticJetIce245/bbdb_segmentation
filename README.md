@@ -197,7 +197,9 @@ What this means for the threshold tool:
   ROI, the threshold sliders only rewrite pixels inside that ROI; the rest of
   the mask is preserved.
 - You can **draw** and **erase** with the brush, **clear** the mask, or
-  **erode** / **dilate** it by one pixel.
+  **erode** / **dilate** it by one pixel. Brush size can be changed with the
+  wheel, `[` / `]`, the Brush ± buttons, or by typing a pixel value directly
+  into the toolbar box (2–120 px).
 - A **paint bucket** fills a connected region of the mask in one click, for
   example a hole inside the tissue. Right-click with the bucket empties a
   region instead.
@@ -407,7 +409,7 @@ switches to the first unfinished one.
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Undo  Clear  Erode/Dilate │ toolbar
-│ Brush ±  Accept & next (Enter)  ● segmented / ○ not saved                   │
+│ Brush ±  Brush: [14] px  Accept & next (Enter)  ● segmented / ○ not saved  │
 ├──────────────────────────────────────────────────────────────────────────┤
 │ Threshold min [====]  max [====]  Otsu  ☐ Invert  Otsu: 214  Opacity  Contrast … │ sliders
 │ Contrast …  Auto  Reset  ☐ Review finished                                  │ controls

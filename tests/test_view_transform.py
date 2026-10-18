@@ -28,7 +28,9 @@ if str(REPO_ROOT) not in sys.path:
 from bbdb_seg.app import SegmentGui  # noqa: E402
 from bbdb_seg.settings import (  # noqa: E402
     CONTROL_MASK,
+    MAX_BRUSH,
     MAX_VIEW_PIXELS,
+    MIN_BRUSH,
     MIN_ZOOM,
     SHIFT_MASK,
     ZOOM_STEP,
@@ -202,6 +204,26 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.app.on_wheel(make_event(x, y, state=SHIFT_MASK, delta=120))
         self.assertEqual(self.app.zoom, zoom_after)
         self.assertGreater(self.app.brush, brush_before)
+
+    def test_direct_brush_entry_clamps_and_updates(self) -> None:
+        self.app.brush_input_var.set("37")
+        self.app.on_brush_entry()
+        self.assertEqual(self.app.brush, 37)
+        self.assertEqual(self.app.brush_input_var.get(), "37")
+
+        self.app.brush_input_var.set("999")
+        self.app.on_brush_entry()
+        self.assertEqual(self.app.brush, MAX_BRUSH)
+        self.assertEqual(self.app.brush_input_var.get(), str(MAX_BRUSH))
+
+        self.app.brush_input_var.set("not a number")
+        self.app.on_brush_entry()
+        self.assertEqual(self.app.brush, MAX_BRUSH)
+        self.assertEqual(self.app.brush_input_var.get(), str(MAX_BRUSH))
+
+        self.app.brush_input_var.set("1")
+        self.app.on_brush_entry()
+        self.assertEqual(self.app.brush, MIN_BRUSH)
 
     def test_keyboard_zoom_and_fit(self) -> None:
         self.app.on_key(make_event(keysym="plus", char="+"))

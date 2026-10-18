@@ -154,6 +154,7 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, PaintMixin, Tool
         self.file_var = tk.StringVar()
         self.state_var = tk.StringVar()
         self.brush_var = tk.StringVar()
+        self.brush_input_var = tk.StringVar()
         self.mask_src_var = tk.StringVar()
         self.status_var = tk.StringVar()
         self.done_var = tk.StringVar()

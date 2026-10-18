@@ -4,7 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from .settings import ZOOM_STEP
+from .settings import MAX_BRUSH, MIN_BRUSH, ZOOM_STEP
 
 
 class UiMixin:
@@ -46,8 +46,17 @@ class UiMixin:
         ttk.Button(toolbar, text="Dilate (D)", command=self.dilate_mask).pack(side="left", padx=(2, 10))
 
         ttk.Button(toolbar, text="Brush -", command=lambda: self.change_brush(-2)).pack(side="left")
-        ttk.Label(toolbar, textvariable=self.brush_var, width=10).pack(side="left")
-        ttk.Button(toolbar, text="Brush +", command=lambda: self.change_brush(2)).pack(side="left", padx=(0, 10))
+        ttk.Label(toolbar, text="Brush:").pack(side="left", padx=(6, 2))
+        self.brush_spin = ttk.Spinbox(
+            toolbar, from_=MIN_BRUSH, to=MAX_BRUSH, increment=1, width=4,
+            textvariable=self.brush_input_var, command=self.on_brush_entry,
+        )
+        self.brush_spin.pack(side="left")
+        self.brush_spin.bind("<Return>", self.on_brush_entry)
+        self.brush_spin.bind("<KP_Enter>", self.on_brush_entry)
+        self.brush_spin.bind("<FocusOut>", self.on_brush_entry)
+        ttk.Label(toolbar, text="px").pack(side="left", padx=(2, 0))
+        ttk.Button(toolbar, text="Brush +", command=lambda: self.change_brush(2)).pack(side="left", padx=(4, 10))
 
         ttk.Button(toolbar, text="Accept & next (Enter)", command=self.accept_and_next).pack(side="left")
         self.done_label = tk.Label(toolbar, textvariable=self.done_var, font=("TkDefaultFont", 10, "bold"))
@@ -157,7 +166,7 @@ class UiMixin:
         help_text = (
             "Enter: accept & next    Left/Right: section    t: Otsu    i: invert    "
             "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase\n"
-            "f: fill    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    s: save    "
+            "f: fill    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    brush box: type px    s: save    "
             "Wheel: zoom    Shift+Wheel: brush    +/-: zoom    0: fit    Middle/Ctrl-drag: pan    Esc/q: quit\n"
             "Shift-drag: new ROI    Shift-click: activate/clear ROI    Backspace/Delete: delete ROI\n"
             "(moving the threshold sliders replaces hand edits)"

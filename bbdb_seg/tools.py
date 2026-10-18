@@ -8,9 +8,33 @@ from .settings import MAX_BRUSH, MIN_BRUSH, SHIFT_MASK, TOOLS, ZOOM_STEP
 
 class ToolsMixin:
 
-    def change_brush(self, delta: int) -> None:
-        self.brush = int(min(MAX_BRUSH, max(MIN_BRUSH, self.brush + delta)))
+    def set_brush(self, value: int) -> None:
+        self.brush = int(min(MAX_BRUSH, max(MIN_BRUSH, int(value))))
         self.update_brush_label()
+        if (
+            self.last_mouse is not None
+            and self.tool != "fill"
+            and not self.panning
+            and not self.roi_dragging
+        ):
+            self.update_cursor(
+                self.last_mouse[0], self.last_mouse[1], self.tool == "erase"
+            )
+
+    def change_brush(self, delta: int) -> None:
+        self.set_brush(self.brush + delta)
+
+    def on_brush_entry(self, _event: tk.Event | None = None) -> str | None:
+        text = self.brush_input_var.get().strip()
+        try:
+            value = int(float(text))
+        except (TypeError, ValueError):
+            value = self.brush
+        self.set_brush(value)
+        if _event is not None and getattr(_event, "keysym", "") in ("Return", "KP_Enter"):
+            self.canvas.focus_set()
+            return "break"
+        return None
 
     def set_tool(self, tool: str) -> None:
         self.tool = tool
@@ -30,6 +54,7 @@ class ToolsMixin:
 
     def update_brush_label(self) -> None:
         self.brush_var.set(f"brush: {self.brush}px")
+        self.brush_input_var.set(str(self.brush))
 
     def update_mode_label(self) -> None:
         self.mode_button.configure(text=f"Mode: {self.tool.capitalize()}")
