@@ -53,7 +53,19 @@ class UiMixin:
 
     def _build_toolbar_brush(self, row: ttk.Frame) -> None:
         ttk.Button(row, text="Erode (E)", command=self.erode_mask).pack(side="left")
-        ttk.Button(row, text="Dilate (D)", command=self.dilate_mask).pack(side="left", padx=(2, 14))
+        ttk.Button(row, text="Dilate (D)", command=self.dilate_mask).pack(side="left", padx=(2, 2))
+        ttk.Button(row, text="Clean (k)", command=self.clean_current).pack(side="left", padx=(2, 2))
+        ttk.Checkbutton(
+            row, text="Exclude background", variable=self.exclude_bg_var,
+            command=self.on_exclude_bg_toggle, takefocus=False,
+        ).pack(side="left", padx=(4, 2))
+        ttk.Checkbutton(
+            row, text="Exclude legend", variable=self.exclude_legend_var,
+            command=self.on_exclude_legend_toggle, takefocus=False,
+        ).pack(side="left", padx=(2, 2))
+        ttk.Checkbutton(
+            row, text="Smooth strokes", variable=self.smooth_var, takefocus=False,
+        ).pack(side="left", padx=(2, 14))
 
         ttk.Button(row, text="Brush -", command=lambda: self.change_brush(-2)).pack(side="left")
         ttk.Label(row, text="Brush:").pack(side="left", padx=(6, 2))
@@ -186,7 +198,7 @@ class UiMixin:
         help_text = (
             "Enter: accept & next    Left/Right: section    t: Otsu    i: invert    "
             "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase\n"
-            "f: fill    L: brush selection    Right-drag in Brush select: erase selection    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    brush box: type px    s: save    "
+            "f: fill    L: brush selection    Right-drag in Brush select: erase selection    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    k: clean (keeps your brush strokes)    [ ]: brush    brush box: type px    s: save    "
             "Wheel: zoom    Shift+Wheel: brush    +/-: zoom    0: fit    Middle/Ctrl-drag: pan    Esc/q: quit\n"
             "Shift+left-drag: rectangle ROI    Shift+right-drag: lasso ROI    Shift-click: activate/clear ROI    Backspace/Delete: delete ROI\n"
             "(moving the threshold sliders replaces hand edits)"
