@@ -61,6 +61,7 @@ class IOMixin:
         self.lasso_points = []
         self.lasso_moved = False
         self.stroke_before = None
+        self.reset_brush_erase()
         self.reset_brush_select(render=False)
         self.clear_roi_items()
 

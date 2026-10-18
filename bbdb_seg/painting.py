@@ -38,8 +38,11 @@ class PaintMixin:
         if self.tool == "fill":
             self.bucket_fill(event, 0 if right else 255)
             return
-        if self.tool == "select" and not right:
-            self.start_brush_select(event)
+        if self.tool == "select":
+            if right:
+                self.start_brush_erase(event)
+            else:
+                self.start_brush_select(event)
             return
         self.last_pt = None
         self.stroke_pushed = False
@@ -49,6 +52,9 @@ class PaintMixin:
         self.continue_stroke(event, right or self.tool == "erase")
 
     def on_drag(self, event: tk.Event, right: bool) -> None:
+        if self.brush_erase_dragging:
+            self.drag_brush_erase(event)
+            return
         if self.brush_select_dragging:
             self.drag_brush_select(event)
             return
@@ -97,6 +103,10 @@ class PaintMixin:
             self.schedule_slider_update("overlay")
 
     def end_stroke(self, _event: tk.Event | None = None) -> None:
+        if self.brush_erase_dragging:
+            if _event is not None:
+                self.end_brush_erase(_event)
+            return
         if self.brush_select_dragging:
             if _event is not None:
                 self.end_brush_select(_event)

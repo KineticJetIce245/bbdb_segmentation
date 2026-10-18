@@ -639,6 +639,80 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.assertIn("roi_extend", [record["op"] for record in records])
         self.assertEqual(records[0]["roi_shape"], "brush")
 
+    def test_brush_select_right_drag_erases_selection_not_mask(self) -> None:
+        self.app.base_mask_img = Image.fromarray(
+            np.zeros((60, 80), dtype=np.uint8)
+        )
+        before_mask = np.asarray(self.app.base_mask_img).copy()
+        self.app.set_tool("select")
+        self.app.set_brush(20)
+        offset_x, offset_y = self.app.display_offset
+        scale = self.app.display_scale
+
+        def screen(row: int, col: int) -> tuple[int, int]:
+            disp_row, disp_col = self.app._base_to_display(row, col)
+            return (
+                int(offset_x + disp_col * scale),
+                int(offset_y + disp_row * scale),
+            )
+
+        start = screen(30, 20)
+        end = screen(30, 60)
+        self.app.start_brush_select(make_event(*start))
+        self.app.drag_brush_select(make_event(*end))
+        self.app.end_brush_select(make_event(*end))
+        self.app._finish_brush_preview()
+        roi = self.app.rois[0]
+        area_before = int(roi.mask.sum()) if roi.mask is not None else 0
+
+        erase_start = screen(30, 20)
+        erase_end = screen(30, 35)
+        self.app.on_press(make_event(*erase_start), right=True)
+        self.assertTrue(self.app.brush_erase_dragging)
+        self.app.on_drag(make_event(*erase_end), right=True)
+        self.app.end_stroke(make_event(*erase_end))
+
+        self.assertEqual(len(self.app.rois), 1)
+        self.assertLess(int(roi.mask.sum()), area_before)
+        np.testing.assert_array_equal(before_mask, np.asarray(self.app.base_mask_img))
+        records = [
+            json.loads(line)
+            for line in self.app.ops_path(self.app.index).read_text().splitlines()
+        ]
+        self.assertIn("roi_erase", [record["op"] for record in records])
+
+    def test_brush_select_right_drag_can_remove_whole_roi(self) -> None:
+        self.app.base_mask_img = Image.fromarray(
+            np.zeros((60, 80), dtype=np.uint8)
+        )
+        before_mask = np.asarray(self.app.base_mask_img).copy()
+        self.app.set_tool("select")
+        self.app.set_brush(20)
+        offset_x, offset_y = self.app.display_offset
+        scale = self.app.display_scale
+        disp_row, disp_col = self.app._base_to_display(30, 40)
+        point = (
+            int(offset_x + disp_col * scale),
+            int(offset_y + disp_row * scale),
+        )
+
+        self.app.start_brush_select(make_event(*point))
+        self.app.end_brush_select(make_event(*point))
+        self.app._finish_brush_preview()
+        self.assertEqual(len(self.app.rois), 1)
+
+        self.app.on_press(make_event(*point), right=True)
+        self.app.end_stroke(make_event(*point))
+
+        self.assertEqual(self.app.rois, [])
+        self.assertIsNone(self.app.active_roi_id)
+        np.testing.assert_array_equal(before_mask, np.asarray(self.app.base_mask_img))
+        records = [
+            json.loads(line)
+            for line in self.app.ops_path(self.app.index).read_text().splitlines()
+        ]
+        self.assertIn("roi_delete", [record["op"] for record in records])
+
     def test_threshold_applies_inside_brush_roi_only(self) -> None:
         self.app.base_mask_img = Image.fromarray(
             np.zeros((60, 80), dtype=np.uint8)

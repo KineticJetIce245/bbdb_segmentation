@@ -170,7 +170,7 @@ class UiMixin:
         help_text = (
             "Enter: accept & next    Left/Right: section    t: Otsu    i: invert    "
             "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase\n"
-            "f: fill    L: brush selection    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    brush box: type px    s: save    "
+            "f: fill    L: brush selection    Right-drag in Brush select: erase selection    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    brush box: type px    s: save    "
             "Wheel: zoom    Shift+Wheel: brush    +/-: zoom    0: fit    Middle/Ctrl-drag: pan    Esc/q: quit\n"
             "Shift+left-drag: rectangle ROI    Shift+right-drag: lasso ROI    Shift-click: activate/clear ROI    Backspace/Delete: delete ROI\n"
             "(moving the threshold sliders replaces hand edits)"

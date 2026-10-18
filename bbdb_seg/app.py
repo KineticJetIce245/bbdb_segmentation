@@ -14,7 +14,8 @@ Features
   * Rectangular (Shift+left-drag), lasso (Shift+right-drag) and brush-shaped
     (L, then left-drag) ROIs, each with its own threshold settings. An active
     ROI limits threshold changes to its shape; outside pixels are preserved.
-    Shift+click activates a ROI; Backspace deletes it.
+    Shift+click activates a ROI; Backspace deletes it. In brush-select mode,
+    right-drag erases part of the active brush ROI.
   * Every mask/ROI operation is appended to ``<mask>.ops.jsonl``. PNG masks are
     written on Enter, s, q or when switching sections, not on every edit.
   * Paint (left drag) / erase (right drag), clear, erode, dilate.
@@ -40,6 +41,7 @@ import numpy as np
 from PIL import Image
 
 from .session import IOMixin
+from .brush_erase import BrushEraseMixin
 from .brush_select import BrushSelectMixin
 from .lasso import LassoMixin
 from .painting import PaintMixin
@@ -58,7 +60,7 @@ from .settings import (
 )
 
 
-class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, PaintMixin, BrushSelectMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
+class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, PaintMixin, BrushSelectMixin, BrushEraseMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
     def __init__(
         self,
         csv_path: Path | None,
@@ -148,6 +150,11 @@ class SegmentGui(QueueMixin, IOMixin, ThresholdMixin, RoiMixin, LassoMixin, Pain
         self.brush_select_after_id: str | None = None
         self.brush_preview_item: int | None = None
         self.brush_preview_photo: ImageTk.PhotoImage | None = None
+        self.brush_erase_dragging = False
+        self.brush_erase_roi_id: int | None = None
+        self.brush_erase_before: np.ndarray | None = None
+        self.brush_erase_last: tuple[int, int] | None = None
+        self.brush_erase_changed = False
 
     def _init_view_state(self) -> None:
         self.disp_index: np.ndarray | None = None

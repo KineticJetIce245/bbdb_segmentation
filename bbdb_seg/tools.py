@@ -41,6 +41,7 @@ class ToolsMixin:
         self.update_mode_label()
         self.canvas.configure(cursor="crosshair" if tool in ("fill", "select") else "")
         if tool != "select":
+            self.reset_brush_erase()
             self.reset_brush_select()
         if tool == "fill":
             self.on_leave(None)
