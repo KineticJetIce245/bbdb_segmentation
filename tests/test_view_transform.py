@@ -152,6 +152,15 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.app.render_all()
         self.assertGreaterEqual(self.app.zoom, MIN_ZOOM)
 
+    def test_background_is_clipped_to_visible_canvas_when_zoomed(self) -> None:
+        x, y = self.center()
+        self.app.zoom_at(x, y, 4.0)
+        self.app.render_all()
+
+        canvas_w, canvas_h = self.app.canvas_size()
+        self.assertLessEqual(self.app.bg_photo.width(), canvas_w + 2)
+        self.assertLessEqual(self.app.bg_photo.height(), canvas_h + 2)
+
     def test_overlay_is_clipped_to_visible_canvas_when_zoomed(self) -> None:
         x, y = self.center()
         self.app.zoom_at(x, y, 4.0)

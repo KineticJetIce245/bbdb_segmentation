@@ -11,9 +11,13 @@ from .settings import WORK_MAX
 try:  # Pillow >= 9.1 moved the resampling filters onto Image.Resampling.
     NEAREST = Image.Resampling.NEAREST
     LANCZOS = Image.Resampling.LANCZOS
+    BICUBIC = Image.Resampling.BICUBIC
+    BILINEAR = Image.Resampling.BILINEAR
 except AttributeError:  # Pillow < 9.1
     NEAREST = Image.NEAREST
     LANCZOS = Image.LANCZOS
+    BICUBIC = Image.BICUBIC
+    BILINEAR = Image.BILINEAR
 
 
 def load_gray_work(path: Path) -> tuple[np.ndarray, tuple[int, int]]:

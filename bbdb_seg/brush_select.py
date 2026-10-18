@@ -1,7 +1,6 @@
 """Brush-shaped selection gesture and blue-to-ROI transition."""
 from __future__ import annotations
 
-import math
 import tkinter as tk
 
 import numpy as np
@@ -10,6 +9,7 @@ from PIL import Image, ImageFilter, ImageTk
 from .image_ops import NEAREST
 from .roi import Roi
 from .transforms import apply_transform
+from .view_math import visible_bounds
 
 
 class BrushSelectMixin:
@@ -200,21 +200,24 @@ class BrushSelectMixin:
         )
         out_w = max(1, int(self.disp_shape[1] * self.display_scale))
         out_h = max(1, int(self.disp_shape[0] * self.display_scale))
-        stencil = Image.fromarray(disp_mask * 255, "L").resize(
-            (out_w, out_h), NEAREST
-        )
-        edges = stencil.filter(ImageFilter.FIND_EDGES).point(
-            lambda value: 255 if value else 0
-        )
         offset_x, offset_y = self.display_offset
         canvas_w, canvas_h = self.canvas_size()
-        left = max(0, int(math.floor(-offset_x)))
-        top = max(0, int(math.floor(-offset_y)))
-        right = min(out_w, int(math.ceil(canvas_w - offset_x)))
-        bottom = min(out_h, int(math.ceil(canvas_h - offset_y)))
+        left, top, right, bottom = visible_bounds(
+            canvas_w, canvas_h, out_w, out_h, (offset_x, offset_y)
+        )
         if right <= left or bottom <= top:
             return None
-        edge = edges.crop((left, top, right, bottom))
+        source = Image.fromarray(disp_mask * 255, "L")
+        stencil = source.transform(
+            (right - left, bottom - top),
+            Image.Transform.AFFINE,
+            (1.0 / self.display_scale, 0.0, left / self.display_scale,
+             0.0, 1.0 / self.display_scale, top / self.display_scale),
+            resample=NEAREST,
+        )
+        edge = stencil.filter(ImageFilter.FIND_EDGES).point(
+            lambda value: 255 if value else 0
+        )
         rgba = Image.new("RGBA", edge.size, (0, 0, 0, 0))
         rgba.paste(Image.new("RGBA", edge.size, colour), (0, 0), edge)
         photo = ImageTk.PhotoImage(rgba)
