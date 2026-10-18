@@ -25,3 +25,6 @@ __MACOSX/
 
 # Separate repository
 prepare_human_autoradiography/
+
+# Mask PNGs and edit logs are shared separately, not committed with the code
+segmentations/
