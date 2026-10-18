@@ -316,6 +316,21 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.assertFalse(self.app.threshold_pending)
         self.assertIsNone(self.app.slider_after_id)
 
+    def test_painting_coalesces_overlay_updates(self) -> None:
+        x, y = self.center()
+        self.app.on_press(make_event(x, y), right=False)
+        self.app.on_drag(make_event(x + 5, y + 5), right=False)
+
+        self.assertTrue(self.app.overlay_pending)
+        self.assertIsNotNone(self.app.slider_after_id)
+        # The mask itself is updated immediately; only the overlay is deferred.
+        point = self.app.canvas_to_base(x + 5, y + 5)
+        self.assertEqual(int(np.asarray(self.app.base_mask_img)[point]), 255)
+
+        self.app.end_stroke(make_event(x + 5, y + 5))
+        self.assertFalse(self.app.overlay_pending)
+        self.assertIsNone(self.app.slider_after_id)
+
     def test_alpha_and_contrast_handlers_coalesce(self) -> None:
         self.app.on_alpha_change("80")
         self.assertEqual(self.app.overlay_alpha, 80)

@@ -177,6 +177,7 @@ class SegmentGui(tk.Tk):
         self.threshold_pending = False
         self.alpha_pending = False
         self.contrast_pending = False
+        self.overlay_pending = False
         self.slider_after_id: str | None = None
         self.ui_ready = False
         self.mask_dirty = False
@@ -500,9 +501,10 @@ class SegmentGui(tk.Tk):
         self.threshold_pending = False
         self.alpha_pending = False
         self.contrast_pending = False
+        self.overlay_pending = False
 
     def schedule_slider_update(self, kind: str) -> None:
-        """Coalesce rapid slider events into one render every ~30 ms."""
+        """Coalesce rapid slider/stroke events into one render every ~30 ms."""
         if not self.ui_ready:
             return
         if kind == "threshold":
@@ -511,6 +513,8 @@ class SegmentGui(tk.Tk):
             self.alpha_pending = True
         elif kind == "contrast":
             self.contrast_pending = True
+        elif kind == "overlay":
+            self.overlay_pending = True
         if self.slider_after_id is None:
             self.slider_after_id = self.after(SLIDER_UPDATE_MS, self.run_slider_updates)
 
@@ -528,12 +532,14 @@ class SegmentGui(tk.Tk):
         do_threshold = self.threshold_pending
         do_alpha = self.alpha_pending
         do_contrast = self.contrast_pending
+        do_overlay = self.overlay_pending
         self.threshold_pending = False
         self.alpha_pending = False
         self.contrast_pending = False
+        self.overlay_pending = False
         if do_threshold:
             self.apply_threshold()
-        elif do_alpha:
+        elif do_alpha or do_overlay:
             self.render_overlay()
         if do_contrast:
             self.render_background()
@@ -877,18 +883,24 @@ class SegmentGui(tk.Tk):
             self.push_undo("stroke")
             self.stroke_pushed = True
         value = 0 if erase else 255
-        if self.last_pt is None:
+        first_point = self.last_pt is None
+        if first_point:
             self.stamp(point[0], point[1], point[0], point[1], value)
         else:
             self.stamp(self.last_pt[0], self.last_pt[1], point[0], point[1], value)
         self.last_pt = point
         self.mask_dirty = True
-        self.render_overlay()
+        if first_point:
+            # Show the initial dab immediately; coalesce the rest of the drag.
+            self.render_overlay()
+        else:
+            self.schedule_slider_update("overlay")
 
     def end_stroke(self, _event: tk.Event | None = None) -> None:
         if self.panning:
             self.end_pan(_event)
             return
+        self.flush_slider_updates()
         self.last_pt = None
         if self.mask_dirty:
             self.mask_source = "edited"

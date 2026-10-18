@@ -448,6 +448,10 @@ On macOS, the system may turn Ctrl+click into a secondary click. If
 Ctrl+left-drag does not pan, use a middle mouse button instead. Panning is
 clamped so the image cannot be dragged completely off the canvas.
 
+While you drag the brush, the mask itself is updated on every motion event, but
+the red overlay is refreshed at most about every 30 ms. Releasing the button
+draws the final overlay immediately.
+
 The **Mode** button cycles through Draw → Erase → Fill. In Fill mode the
 cursor becomes a crosshair. The bucket fills the 4-connected region of the
 *mask* under the cursor; it does not look at image intensities. To fill a
