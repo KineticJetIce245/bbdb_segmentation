@@ -219,6 +219,17 @@ What this means for the threshold tool:
 - You can **zoom** with the mouse wheel, `+` / `-`, and **pan** by dragging
   with the middle mouse button or Ctrl+left. `0` fits the image to the window
   again. Zooming and panning change only the view, never the saved mask.
+- **Exclude background** (on by default): the slide background level is
+  estimated from the image border, and background pixels (plus a 1-px margin
+  for the blurry tissue rim) are never selected, whether by the threshold
+  sliders, brush strokes or the fill bucket. White, grey or dark backgrounds
+  all work.
+- **Clean (k)** tidies the mask in one undoable step. It removes background
+  pixels, snaps the boundary onto the strongest nearby image edge (a 3-px band,
+  marker-controlled watershed: the outline can move up to that edge but never
+  across it) and drops islands under 30 px. With an ROI active, only the ROI
+  changes. Check the result, then Ctrl+Z if you don't like it. Install
+  `scikit-image` for exact edge placement (otherwise a scipy fallback is used).
 - **Overlay opacity** and **contrast** sliders change only what you see on
   screen.
 - Every mask-changing operation and every ROI action is appended to
@@ -236,6 +247,8 @@ bbdb_seg/                       # Python package (implementation)
   ui.py                         # Tk widget construction
   session.py                    # image/mask loading, saving and queue I/O
   status.py                     # manual segmented status and stop autolog
+  clean.py                      # background detection, edge snapping, island removal (pure)
+  cleaning.py                   # Exclude background / Clean (k) GUI glue
   work_queue.py                 # CSV selection and work-queue refresh
   threshold.py                  # threshold range, Invert, slider coalescing
   brush_select.py               # brush-shaped ROI gesture and blue transition
@@ -482,6 +495,7 @@ The status bar shows:
 | `Ctrl+Z` / `u` | Undo the last mask change                      |
 | `c`            | Clear the whole mask                           |
 | `E` / `D`      | Erode / dilate the mask by one pixel           |
+| `k`            | Clean: drop background, snap edges, remove specks |
 | `[` / `]`      | Smaller / larger brush                         |
 | `+` / `=` / `-` | Zoom in / out at the mouse pointer            |
 | `0`            | Fit the image to the window                    |

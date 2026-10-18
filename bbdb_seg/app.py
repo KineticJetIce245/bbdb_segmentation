@@ -43,6 +43,7 @@ from PIL import Image
 from .session import IOMixin
 from .status import StatusMixin
 from .brush_erase import BrushEraseMixin
+from .cleaning import CleanMixin
 from .brush_select import BrushSelectMixin
 from .lasso import LassoMixin
 from .painting import PaintMixin
@@ -61,7 +62,7 @@ from .settings import (
 )
 
 
-class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, LassoMixin, PaintMixin, BrushSelectMixin, BrushEraseMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
+class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, LassoMixin, CleanMixin, PaintMixin, BrushSelectMixin, BrushEraseMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
     def __init__(
         self,
         csv_path: Path | None,
@@ -82,6 +83,7 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
 
         self._init_document_state()
         self._init_edit_state()
+        self._init_clean_state()
         self._init_brush_select_state()
         self._init_view_state()
         self._init_tk_vars()
@@ -189,6 +191,7 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         self.done_var = tk.StringVar()
         self.otsu_var = tk.StringVar()
         self.invert_var = tk.BooleanVar(value=False)
+        self.exclude_bg_var = tk.BooleanVar(value=True)
         self.segmented_var = tk.BooleanVar(value=False)
         self.stop_auto_confirm_var = tk.BooleanVar(value=False)
         self.queue_filter_var = tk.StringVar(value="all")
@@ -224,6 +227,8 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
             self.erode_mask()
         elif key == "D":
             self.dilate_mask()
+        elif char == "k":
+            self.clean_current()
         elif key in ("BackSpace", "Delete"):
             self.delete_active_roi()
         elif char == "t":

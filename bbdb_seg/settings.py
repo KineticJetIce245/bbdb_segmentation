@@ -19,3 +19,7 @@ MAX_VIEW_PIXELS = 12_000_000
 SHIFT_MASK = 0x0001
 CONTROL_MASK = 0x0004
 SLIDER_UPDATE_MS = 30    # coalesce slider/stroke render events
+BG_TOLERANCE = 12        # gray levels from the border median that count as background
+BG_MARGIN = 1            # px grown around background to absorb the blurry tissue rim
+CLEAN_BAND = 3           # px band around the mask boundary that edge snapping may move
+CLEAN_MIN_ISLAND = 30    # px; smaller connected pieces are removed by Clean
