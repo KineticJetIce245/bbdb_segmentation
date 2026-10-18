@@ -38,10 +38,9 @@ class PaintMixin:
         if self.tool == "fill":
             self.bucket_fill(event, 0 if right else 255)
             return
-        if self.tool == "threshold" and not right:
-            self.start_threshold_stroke(event)
+        if self.tool == "select" and not right:
+            self.start_brush_select(event)
             return
-        self.threshold_stroke_active = False
         self.last_pt = None
         self.stroke_pushed = False
         self.stroke_before = np.asarray(self.base_mask_img).copy()
@@ -50,6 +49,9 @@ class PaintMixin:
         self.continue_stroke(event, right or self.tool == "erase")
 
     def on_drag(self, event: tk.Event, right: bool) -> None:
+        if self.brush_select_dragging:
+            self.drag_brush_select(event)
+            return
         if self.lasso_dragging:
             self.drag_lasso_select(event)
             return
@@ -72,9 +74,6 @@ class PaintMixin:
             self.continue_stroke(event, right or self.tool == "erase")
 
     def continue_stroke(self, event: tk.Event, erase: bool) -> None:
-        if self.threshold_stroke_active:
-            self.continue_threshold_stroke(event)
-            return
         point = self.canvas_to_base(event.x, event.y)
         self.update_cursor(event.x, event.y, erase)
         if point is None:
@@ -98,6 +97,10 @@ class PaintMixin:
             self.schedule_slider_update("overlay")
 
     def end_stroke(self, _event: tk.Event | None = None) -> None:
+        if self.brush_select_dragging:
+            if _event is not None:
+                self.end_brush_select(_event)
+            return
         if self.lasso_dragging:
             if _event is not None:
                 self.end_lasso_select(_event)
@@ -109,10 +112,6 @@ class PaintMixin:
         if self.panning:
             self.end_pan(_event)
             return
-        self.clear_brush_overlay()
-        self.threshold_stroke_active = False
-        self.threshold_stroke_values = None
-        self.threshold_stroke_roi_mask = None
         self.flush_slider_updates()
         self.last_pt = None
         before = self.stroke_before

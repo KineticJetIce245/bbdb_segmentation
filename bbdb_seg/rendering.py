@@ -113,8 +113,6 @@ class RenderMixin:
         self.canvas.tag_raise(self.ov_id)
         for item in self.roi_items:
             self.canvas.tag_raise(item)
-        if self.brush_overlay_id is not None:
-            self.canvas.tag_raise(self.brush_overlay_id)
         if self.cursor_id is not None:
             self.canvas.tag_raise(self.cursor_id)
 

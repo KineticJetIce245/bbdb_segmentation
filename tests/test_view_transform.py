@@ -602,50 +602,65 @@ class SegmentGuiViewTests(unittest.TestCase):
         ):
             self.assertIn(handler, self.app.canvas.bind(sequence))
 
-    def test_threshold_brush_changes_only_its_disk(self) -> None:
+    def test_brush_select_unions_multiple_strokes_into_one_roi(self) -> None:
         self.app.base_mask_img = Image.fromarray(
             np.zeros((60, 80), dtype=np.uint8)
         )
-        self.app.set_threshold_range(0, 255)
-        self.app.invert_var.set(False)
-        self.app.set_tool("threshold")
-
-        x, y = self.center()
-        self.app.on_press(make_event(x, y), right=False)
-        self.assertTrue(self.app.threshold_stroke_active)
-        self.assertIsNotNone(self.app.brush_overlay_id)
-        self.app.on_drag(make_event(x + 10, y), right=False)
-        self.app.end_stroke(make_event(x + 10, y))
-
-        self.assertFalse(self.app.threshold_stroke_active)
-        self.assertIsNone(self.app.brush_overlay_id)
-        after = np.asarray(self.app.base_mask_img)
-        self.assertGreater(int(np.count_nonzero(after)), 0)
-        self.assertEqual(after[0, 0], 0)
-        self.assertEqual(after[-1, -1], 0)
-
-        record = json.loads(self.app.ops_path(self.app.index).read_text().splitlines()[-1])
-        self.assertEqual(record["op"], "threshold_brush")
-        self.assertGreater(record["added"], 0)
-
-    def test_threshold_brush_respects_active_roi(self) -> None:
-        self.app.base_mask_img = Image.fromarray(
-            np.zeros((60, 80), dtype=np.uint8)
-        )
-        self.app.create_roi(0, 0, 10, 10)
-        self.app.set_threshold_range(0, 255)
-        self.app.set_tool("threshold")
         before = np.asarray(self.app.base_mask_img).copy()
-
+        self.app.set_tool("select")
         x, y = self.center()
-        self.app.on_press(make_event(x, y), right=False)
-        self.app.end_stroke(make_event(x, y))
 
+        self.app.start_brush_select(make_event(x, y))
+        self.assertTrue(self.app.brush_select_dragging)
+        self.assertTrue(self.app.brush_select_items)
+        self.app.drag_brush_select(make_event(x + 20, y))
+        self.app.end_brush_select(make_event(x + 20, y))
+        self.assertEqual(len(self.app.rois), 1)
+        self.assertEqual(self.app.rois[0].shape, "brush")
+        self.assertIsNotNone(self.app.brush_preview_item)
+        self.app._finish_brush_preview()
+        self.assertIsNone(self.app.brush_preview_item)
+        self.assertTrue(self.app.roi_photos)
+
+        first_points = len(self.app.rois[0].points or [])
+        self.app.start_brush_select(make_event(x, y + 30))
+        self.app.drag_brush_select(make_event(x + 20, y + 30))
+        self.app.end_brush_select(make_event(x + 20, y + 30))
+        self.assertEqual(len(self.app.rois), 1)
+        roi = self.app.rois[0]
+        self.assertGreater(len(roi.points or []), first_points)
         np.testing.assert_array_equal(before, np.asarray(self.app.base_mask_img))
 
-    def test_l_key_toggles_threshold_brush(self) -> None:
+        records = [
+            json.loads(line)
+            for line in self.app.ops_path(self.app.index).read_text().splitlines()
+        ]
+        self.assertEqual(records[0]["op"], "roi_create")
+        self.assertIn("roi_extend", [record["op"] for record in records])
+        self.assertEqual(records[0]["roi_shape"], "brush")
+
+    def test_threshold_applies_inside_brush_roi_only(self) -> None:
+        self.app.base_mask_img = Image.fromarray(
+            np.zeros((60, 80), dtype=np.uint8)
+        )
+        self.app.set_tool("select")
+        x, y = self.center()
+        self.app.start_brush_select(make_event(x, y))
+        self.app.end_brush_select(make_event(x, y))
+        self.app._finish_brush_preview()
+
+        roi = self.app.rois[0]
+        self.app.set_threshold_range(0, 255)
+        self.app.apply_threshold()
+
+        after = np.asarray(self.app.base_mask_img)
+        mask = roi.mask_array(*after.shape)
+        self.assertTrue(np.all(after[mask] == 255))
+        self.assertTrue(np.all(after[~mask] == 0))
+
+    def test_l_key_toggles_brush_select(self) -> None:
         self.app.on_key(make_event(keysym="l", char="l"))
-        self.assertEqual(self.app.tool, "threshold")
+        self.assertEqual(self.app.tool, "select")
         self.app.on_key(make_event(keysym="l", char="l"))
         self.assertEqual(self.app.tool, "draw")
 

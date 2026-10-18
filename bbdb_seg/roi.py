@@ -28,6 +28,7 @@ class Roi:
     invert: bool
     shape: str = "rectangle"
     points: list[tuple[int, int]] | None = None
+    mask: np.ndarray | None = None
 
     @property
     def bbox(self) -> list[int]:
@@ -35,6 +36,10 @@ class Roi:
 
     def contains(self, row: int, col: int) -> bool:
         """Return True when a base-image pixel is inside this ROI."""
+        if self.shape == "brush" and self.mask is not None:
+            if self.mask.shape[0] <= row or self.mask.shape[1] <= col or row < 0 or col < 0:
+                return False
+            return bool(self.mask[row, col])
         if self.shape != "polygon" or not self.points:
             return self.r0 <= row < self.r1 and self.c0 <= col < self.c1
         points = self.points
@@ -55,6 +60,8 @@ class Roi:
     def mask_array(self, height: int, width: int) -> np.ndarray:
         """Rasterize the ROI as a boolean mask at working-image resolution."""
         mask = np.zeros((height, width), dtype=bool)
+        if self.shape == "brush" and self.mask is not None:
+            return self.mask.copy()
         if self.shape != "polygon" or not self.points:
             mask[self.r0:self.r1, self.c0:self.c1] = True
             return mask

@@ -33,6 +33,7 @@ class RoiMixin:
             except tk.TclError:
                 pass
         self.roi_items.clear()
+        self.roi_photos.clear()
 
     def _base_to_display(self, row: int, col: int) -> tuple[int, int]:
         assert self.base_img is not None
@@ -65,31 +66,7 @@ class RoiMixin:
             active = roi.roi_id == self.active_roi_id
             colour = "#00e5ff" if active else "#ffd400"
             width = 3 if active else 2
-            if roi.shape == "polygon":
-                points = roi_screen_points(
-                    roi,
-                    *self.base_img.shape,
-                    self.flip,
-                    self.rotation,
-                    self.display_scale,
-                    self.display_offset,
-                )
-                if len(points) >= 3:
-                    coords = [coord for point in points for coord in point]
-                    coords.extend(points[0])
-                    self.roi_items.append(
-                        self.canvas.create_line(
-                            *coords, fill=colour, width=width, dash=(6, 4),
-                            joinstyle="round",
-                        )
-                    )
-            else:
-                self.roi_items.append(
-                    self.canvas.create_rectangle(
-                        x0, y0, x1, y1, outline=colour,
-                        width=width, dash=(6, 4),
-                    )
-                )
+            self.roi_items.extend(self._roi_outline_items(roi, colour, width))
             self.roi_items.append(
                 self.canvas.create_text(
                     x0 + 4, y0 + 2, text=f"R{roi.roi_id}", anchor="nw",
@@ -100,6 +77,43 @@ class RoiMixin:
             self.canvas.tag_raise(item)
         if self.cursor_id is not None:
             self.canvas.tag_raise(self.cursor_id)
+
+    def _roi_outline_items(self, roi: Roi, colour: str, width: int) -> list[int]:
+        assert self.base_img is not None
+        if roi.shape == "brush":
+            outline = self.brush_outline_item(roi, colour)
+            if outline is None:
+                return []
+            item, photo = outline
+            self.roi_photos.append(photo)
+            return [item]
+        if roi.shape == "polygon":
+            points = roi_screen_points(
+                roi,
+                *self.base_img.shape,
+                self.flip,
+                self.rotation,
+                self.display_scale,
+                self.display_offset,
+            )
+            if len(points) < 3:
+                return []
+            coords = [coord for point in points for coord in point]
+            coords.extend(points[0])
+            return [
+                self.canvas.create_line(
+                    *coords, fill=colour, width=width, dash=(6, 4),
+                    joinstyle="round",
+                )
+            ]
+        rect = self._roi_screen_rect(roi)
+        if rect is None:
+            return []
+        return [
+            self.canvas.create_rectangle(
+                *rect, outline=colour, width=width, dash=(6, 4),
+            )
+        ]
 
     def _canvas_to_base_clamped(self, x: float, y: float) -> tuple[int, int] | None:
         if self.base_img is None or self.display_scale <= 0:
@@ -179,7 +193,7 @@ class RoiMixin:
             return
         self.create_roi(row0, col0, row1 + 1, col1 + 1)
 
-    def _register_roi(self, roi: Roi) -> None:
+    def _register_roi(self, roi: Roi, render: bool = True) -> None:
         self.next_roi_id += 1
         self.rois.append(roi)
         self.active_roi_id = roi.roi_id
@@ -190,7 +204,8 @@ class RoiMixin:
                 roi, (self.threshold_min, self.threshold_max, bool(self.invert_var.get()))
             ),
         )
-        self.render_rois()
+        if render:
+            self.render_rois()
         self.update_status()
 
     def create_roi(self, r0: int, c0: int, r1: int, c1: int) -> None:
