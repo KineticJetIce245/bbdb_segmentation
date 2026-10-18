@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-import math
 import tkinter as tk
 
 import numpy as np
 from PIL import Image, ImageTk
 
 from .transforms import apply_transform
-from .image_ops import LANCZOS, NEAREST, apply_contrast as contrast_array
+from .image_ops import BILINEAR, NEAREST, apply_contrast as contrast_array
 from .settings import MIN_ZOOM
 from .view_math import (
     clamp_pan as clamp_pan_value,
     fit_scale,
     max_zoom as max_zoom_value,
+    visible_bounds,
 )
 
 class RenderMixin:
@@ -61,13 +61,30 @@ class RenderMixin:
         self.display_offset = (offset_x, offset_y)
 
         disp_img = self.apply_contrast(disp_img)
-        pil = Image.fromarray(disp_img, "L").convert("RGB").resize((out_w, out_h), LANCZOS)
-        self.bg_photo = ImageTk.PhotoImage(pil)
+        left, top, right, bottom = visible_bounds(
+            canvas_w, canvas_h, out_w, out_h, (offset_x, offset_y)
+        )
+        if right <= left or bottom <= top:
+            if self.bg_id is not None:
+                self.canvas.itemconfigure(self.bg_id, state="hidden")
+            return
+        source = Image.fromarray(disp_img, "L")
+        visible = source.transform(
+            (right - left, bottom - top),
+            Image.Transform.AFFINE,
+            (1.0 / scale, 0.0, left / scale, 0.0, 1.0 / scale, top / scale),
+            resample=BILINEAR,
+        ).convert("RGB")
+        self.bg_photo = ImageTk.PhotoImage(visible)
+        place_x = offset_x + left
+        place_y = offset_y + top
         if self.bg_id is None:
-            self.bg_id = self.canvas.create_image(offset_x, offset_y, anchor="nw", image=self.bg_photo)
+            self.bg_id = self.canvas.create_image(
+                place_x, place_y, anchor="nw", image=self.bg_photo
+            )
         else:
-            self.canvas.itemconfigure(self.bg_id, image=self.bg_photo)
-            self.canvas.coords(self.bg_id, offset_x, offset_y)
+            self.canvas.itemconfigure(self.bg_id, image=self.bg_photo, state="normal")
+            self.canvas.coords(self.bg_id, place_x, place_y)
 
     def render_overlay(self) -> None:
         if self.base_mask_img is None:
@@ -81,17 +98,25 @@ class RenderMixin:
 
         # Only build the part of the overlay that can be seen. At high zoom the
         # full RGBA image can be tens of times larger than the canvas.
-        left = max(0, int(math.floor(-offset_x)))
-        top = max(0, int(math.floor(-offset_y)))
-        right = min(out_w, int(math.ceil(canvas_w - offset_x)))
-        bottom = min(out_h, int(math.ceil(canvas_h - offset_y)))
+        left, top, right, bottom = visible_bounds(
+            canvas_w, canvas_h, out_w, out_h, (offset_x, offset_y)
+        )
         if right <= left or bottom <= top:
             if self.ov_id is not None:
                 self.canvas.itemconfigure(self.ov_id, state="hidden")
             return
 
-        stencil_full = Image.fromarray(disp_mask, "L").resize((out_w, out_h), NEAREST)
-        stencil = stencil_full.crop((left, top, right, bottom))
+        source = Image.fromarray(disp_mask, "L")
+        stencil = source.transform(
+            (right - left, bottom - top),
+            Image.Transform.AFFINE,
+            (1.0 / self.display_scale, 0.0, left / self.display_scale,
+             0.0, 1.0 / self.display_scale, top / self.display_scale),
+            resample=NEAREST,
+        )
+        self._set_overlay_photo(stencil, offset_x + left, offset_y + top)
+
+    def _set_overlay_photo(self, stencil: Image.Image, x: float, y: float) -> None:
         rgba = Image.new("RGBA", stencil.size, (0, 0, 0, 0))
         rgba.paste(
             Image.new("RGBA", stencil.size, (255, 40, 40, self.overlay_alpha)),
@@ -99,17 +124,15 @@ class RenderMixin:
             stencil,
         )
         self.ov_photo = ImageTk.PhotoImage(rgba)
-        place_x = offset_x + left
-        place_y = offset_y + top
         if self.ov_id is None:
             self.ov_id = self.canvas.create_image(
-                place_x, place_y, anchor="nw", image=self.ov_photo
+                x, y, anchor="nw", image=self.ov_photo
             )
         else:
             self.canvas.itemconfigure(
                 self.ov_id, image=self.ov_photo, state="normal"
             )
-            self.canvas.coords(self.ov_id, place_x, place_y)
+            self.canvas.coords(self.ov_id, x, y)
         self.canvas.tag_raise(self.ov_id)
         for item in self.roi_items:
             self.canvas.tag_raise(item)
@@ -248,8 +271,7 @@ class RenderMixin:
             self.display_offset[0] + move_x,
             self.display_offset[1] + move_y,
         )
-        if self.bg_id is not None:
-            self.canvas.move(self.bg_id, move_x, move_y)
+        self.render_background()
         for item in self.roi_items:
             self.canvas.move(item, move_x, move_y)
         if self.roi_drag_item is not None:

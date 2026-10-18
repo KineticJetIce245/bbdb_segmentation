@@ -13,9 +13,9 @@ shared.
 
 The work is split into one CSV per **specimen and stain** (for example
 `csv/lion_nissl.csv`). Participants can each take one or more CSVs. A section
-counts as **done** once its mask file exists. By default, opening a CSV only
-shows the sections that are not done yet; tick **Review finished** to include
-already segmented sections.
+is **done** when its manual **Segmented** status is true. If no status has been
+written yet, an existing PNG is treated as segmented. The **Queue** menu can
+show **not segmented**, **segmented**, or **all** (default: all).
 
 > **TL;DR:** for each section, paint the **cerebral cortex** (the grey matter
 > ribbon on the surface of the cerebral hemispheres) and nothing else. See
@@ -181,9 +181,12 @@ What this means for the threshold tool:
 
 ## Features
 
-- Opens only the sections in a CSV that **do not have a segmentation yet**, one
-  after another. Tick **Review finished** to include sections that already have
-  a mask, so you can inspect or modify them.
+- The **Queue** menu switches between **not segmented**, **segmented**, and
+  **all** sections. **Segmented** is a manual checkbox, so a saved PNG does not
+  force the section to stay marked done.
+- **Segmented** auto-checks when a PNG is written. **Stop auto confirm** is a
+  per-image switch that prevents that automatic check and writes a
+  `stop autolog` tag to the operation log.
 - **Threshold min** and **Threshold max** build the mask from the image.
   Pixels inside the range `min <= value <= max` become `1`; pixels outside
   become `0`. The initial range is chosen from the image's **Otsu threshold**
@@ -231,7 +234,8 @@ bbdb_seg/                       # Python package (implementation)
   app.py                        # SegmentGui composition + CLI
   __main__.py                   # python -m bbdb_seg
   ui.py                         # Tk widget construction
-  session.py                    # image/mask loading, saving and status
+  session.py                    # image/mask loading, saving and queue I/O
+  status.py                     # manual segmented status and stop autolog
   work_queue.py                 # CSV selection and work-queue refresh
   threshold.py                  # threshold range, Invert, slider coalescing
   brush_select.py               # brush-shaped ROI gesture and blue transition
@@ -400,13 +404,10 @@ If you run `python segment_gui.py` without a CSV, a file picker opens so you can
 choose one. The package can also be launched directly with
 `python -m bbdb_seg`.
 
-If every section in the CSV already has a mask, the GUI asks whether you want to
-review them anyway. To always open every section, use `--all` or tick
-**Review finished** in the display controls.
-
-**Review finished** rebuilds the queue immediately. Unchecking it returns to
-unfinished sections only; if you are currently on a finished section, the GUI
-switches to the first unfinished one.
+The queue opens with **all** sections by default. Change **Queue** in the
+display controls to **not segmented**, **segmented**, or **all**; the queue is
+rebuilt immediately. If the current section is not in the new queue, the first
+matching section loads instead.
 
 ---
 
@@ -416,11 +417,11 @@ switches to the first unfinished one.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Undo  Clear  Erode/Dilate │ toolbar
-│ Brush ±  Brush: [14] px  Accept & next (Enter)  ● segmented / ○ not saved  │
+│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Brush select  Undo  Clear │ toolbar row 1
+│ Erode/Dilate Brush ± [14] px Accept ☑ Segmented ☐ Stop auto confirm ● done │ toolbar row 2
 ├──────────────────────────────────────────────────────────────────────────┤
 │ Threshold min [====]  max [====]  Otsu  ☐ Invert  Otsu: 214  Opacity  Contrast … │ sliders
-│ Contrast …  Auto  Reset  ☐ Review finished                                  │ controls
+│ Contrast …  Auto  Reset  Queue: [all]                                       │ controls
 ├──────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │                section image with red mask overlay                       │ canvas
@@ -536,8 +537,8 @@ values, or the saved mask. Zoom and pan also change only the view.
 
 ### Typical workflow
 
-1. Open your assigned CSV. The first section that isn't segmented yet loads
-   with its Otsu range.
+1. Open your assigned CSV. The first section in the selected queue loads with
+   its Otsu range; the default queue is **all**.
 2. Adjust **Threshold min** / **Threshold max** (and **Invert** if needed) until
    the mask is as close to the cerebral cortex as possible.
 3. For local corrections, **Shift+left-drag** a rectangle or
@@ -556,9 +557,11 @@ values, or the saved mask. Zoom and pan also change only the view.
 6. Press **Enter** to save the mask and move to the next section. The
    operation log is written immediately; the PNG is written when you press
    **Enter**, **s**, **q**, or switch sections. An unedited mask is only
-   written when you press Enter.
-7. You can quit at any time with `q`. When you re-open the same CSV, it shows
-   only the sections that are still missing.
+   written when you press Enter. A successful save auto-checks **Segmented**
+   unless **Stop auto confirm** is on.
+7. You can quit at any time with `q`. When you re-open the CSV, the **Queue**
+   menu defaults to **all**; choose **not segmented** to see only the sections
+   that still need work.
 
 ---
 
@@ -579,10 +582,16 @@ values, or the saved mask. Zoom and pan also change only the view.
     `threshold`;
   - `added` / `removed` pixel counts and the changed `bbox` for mask-changing
     operations;
+  - `segmented` and `stop_auto_confirm` snapshots; status records also carry a
+    `tag` (`segmented`, `not segmented`, `stop autolog`, `resume autolog`);
   - the section name, image path, mask path and an ISO timestamp.
+  - The log is capped at 50 records. When it grows past that, the two oldest
+    records are merged into one `op: "merged"` record with a count, first/last
+    timestamps, added/removed totals and the latest status snapshot.
 - **Autosave:** the `.ops.jsonl` log is appended immediately. The PNG is not
   written on every edit; it is written on **Enter**, **s**, **q**, or when you
-  switch to another section.
+  switch to another section. After a successful PNG save, **Segmented**
+  auto-checks unless **Stop auto confirm** is on.
 - **Flip/rotation:** written back into the CSV you opened, in the `flip` column
   (empty, `LR`, `UP`, or `LR+UP`) and the `rotation` column (number of 90°
   steps).
@@ -739,7 +748,7 @@ python make_segmentation_csvs.py --data-root /path/to/brain_biodiversity_bank
 ## Command-line options
 
 ```
-python segment_gui.py [CSV] [--data-root DIR] [--seg-root DIR] [--all]
+python segment_gui.py [CSV] [--data-root DIR] [--seg-root DIR]
 ```
 
 | Option        | Default                    | Description                                                        |
@@ -747,7 +756,6 @@ python segment_gui.py [CSV] [--data-root DIR] [--seg-root DIR] [--all]
 | `CSV`         | *(file picker if omitted)* | Group CSV to segment, e.g. `csv/lion_nissl.csv`.                   |
 | `--data-root` | auto-detected              | The `brain_biodiversity_bank` folder (contains `v.1/`).            |
 | `--seg-root`  | this repository            | Folder that the CSV `segmentation` paths are relative to.          |
-| `--all`       | off                        | Open every section, same as ticking **Review finished** at startup. |
 
 ---
 
@@ -798,9 +806,9 @@ The GUI needs a display. Run it locally, or use `ssh -X` or a remote desktop.
 - Zoom and pan also change only the display. The brush and cursor are mapped
   through the current view transform, so the saved mask is unaffected by the
   zoom level or scroll position.
-- The red overlay is rebuilt only for the visible canvas area. At high zoom the
-  full magnified overlay would be many times larger than the window; clipping it
-  keeps painting responsive.
+- The background and red overlay are rebuilt only for the visible canvas area.
+  At high zoom the full magnified images would be many times larger than the
+  window; clipping them keeps zooming and panning responsive.
 - The recorded flip/rotation can be applied to both the image and the mask in a
   later processing step.
 

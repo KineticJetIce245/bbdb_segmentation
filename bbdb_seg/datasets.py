@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from .transforms import normalize_flip, normalize_rotation
+from .ops_log import read_status
 from .paths import resolve_path
 
 
@@ -37,3 +38,16 @@ def write_records(csv_path: Path, records: pd.DataFrame) -> None:
     output["flip"] = output["flip"].fillna("").astype(str)
     output["rotation"] = output["rotation"].fillna(0).astype(int)
     output.to_csv(csv_path, index=False)
+
+def queue_indices(records: pd.DataFrame, seg_root: Path, mode: str) -> list[int]:
+    """Return rows matching not segmented / segmented / all."""
+    if mode == "all":
+        return list(range(len(records)))
+    want = mode == "segmented"
+    result = []
+    for index in range(len(records)):
+        seg_path = resolve_path(seg_root, records.at[index, "segmentation"])
+        segmented, _stop = read_status(seg_path)
+        if segmented is want:
+            result.append(index)
+    return result

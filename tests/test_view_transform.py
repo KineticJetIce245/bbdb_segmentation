@@ -26,6 +26,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from bbdb_seg.app import SegmentGui  # noqa: E402
+from bbdb_seg.ops_log import read_status  # noqa: E402
 from bbdb_seg.settings import (  # noqa: E402
     CONTROL_MASK,
     MAX_BRUSH,
@@ -151,6 +152,15 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.app.zoom = 0.01
         self.app.render_all()
         self.assertGreaterEqual(self.app.zoom, MIN_ZOOM)
+
+    def test_background_is_clipped_to_visible_canvas_when_zoomed(self) -> None:
+        x, y = self.center()
+        self.app.zoom_at(x, y, 4.0)
+        self.app.render_all()
+
+        canvas_w, canvas_h = self.app.canvas_size()
+        self.assertLessEqual(self.app.bg_photo.width(), canvas_w + 2)
+        self.assertLessEqual(self.app.bg_photo.height(), canvas_h + 2)
 
     def test_overlay_is_clipped_to_visible_canvas_when_zoomed(self) -> None:
         x, y = self.center()
@@ -738,7 +748,56 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.app.on_key(make_event(keysym="l", char="l"))
         self.assertEqual(self.app.tool, "draw")
 
-    def test_review_finished_checkbox_rebuilds_queue(self) -> None:
+    def test_auto_segmented_on_save_and_manual_override(self) -> None:
+        self.app.mask_dirty = True
+        self.app.save_mask()
+        self.assertTrue(self.app.segmented_status)
+        self.assertTrue(read_status(self.app.seg_path(self.app.index))[0])
+
+        self.app.segmented_var.set(False)
+        self.app.on_segmented_toggle()
+        self.assertFalse(self.app.segmented_status)
+        self.assertFalse(read_status(self.app.seg_path(self.app.index))[0])
+        record = json.loads(
+            self.app.ops_path(self.app.index).read_text().splitlines()[-1]
+        )
+        self.assertEqual(record["tag"], "not segmented")
+        self.assertFalse(record["segmented"])
+
+        self.app.segmented_var.set(True)
+        self.app.on_segmented_toggle()
+        self.assertTrue(read_status(self.app.seg_path(self.app.index))[0])
+
+    def test_stop_auto_confirm_prevents_auto_segmented(self) -> None:
+        self.app.stop_auto_confirm_var.set(True)
+        self.app.on_stop_auto_confirm_toggle()
+        record = json.loads(
+            self.app.ops_path(self.app.index).read_text().splitlines()[-1]
+        )
+        self.assertEqual(record["tag"], "stop autolog")
+        self.assertTrue(record["stop_auto_confirm"])
+
+        self.app.mask_dirty = True
+        self.app.save_mask()
+        self.assertFalse(self.app.segmented_status)
+        self.assertEqual(
+            read_status(self.app.seg_path(self.app.index)),
+            (False, True),
+        )
+
+        self.app.stop_auto_confirm_var.set(False)
+        self.app.on_stop_auto_confirm_toggle()
+        self.app.mask_dirty = True
+        self.app.save_mask()
+        self.assertTrue(self.app.segmented_status)
+
+    def test_toolbar_is_split_into_two_rows(self) -> None:
+        toolbar = self.app.grid_slaves(row=0, column=0)[0]
+        rows = toolbar.winfo_children()
+        self.assertEqual(len(rows), 2)
+        self.assertLessEqual(toolbar.winfo_reqwidth(), 1450)
+
+    def test_queue_menu_filters_by_segmented_status(self) -> None:
         # Add a second pending section to the in-memory records.
         extra = self.app.records.iloc[0].copy()
         extra["base"] = "two"
@@ -752,21 +811,24 @@ class SegmentGuiViewTests(unittest.TestCase):
             self.data_root / "v.1" / "sections" / "test_group" / "two.png"
         )
 
+        self.app.queue_filter_var.set("all")
+        self.app.on_queue_filter_change()
+        self.assertEqual(self.app.queue, [0, 1])
         self.app.mask_dirty = True
         self.app.save_mask()
+        self.assertTrue(self.app.segmented_status)
+
+        self.app.queue_filter_var.set("not segmented")
+        self.app.on_queue_filter_change()
+        self.assertEqual(self.app.queue, [1])
+
+        self.app.queue_filter_var.set("segmented")
+        self.app.on_queue_filter_change()
         self.assertEqual(self.app.queue, [0])
 
-        self.app.review_finished_var.set(True)
-        self.app.on_review_finished_change()
-        self.assertTrue(self.app.review_all)
+        self.app.queue_filter_var.set("all")
+        self.app.on_queue_filter_change()
         self.assertEqual(self.app.queue, [0, 1])
-        self.assertEqual(self.app.index, 0)
-
-        self.app.review_finished_var.set(False)
-        self.app.on_review_finished_change()
-        self.assertFalse(self.app.review_all)
-        self.assertEqual(self.app.queue, [1])
-        self.assertEqual(self.app.index, 1)
 
     def test_roi_display_mapping_matches_disp_index(self) -> None:
         self.app.create_roi(5, 6, 15, 20)

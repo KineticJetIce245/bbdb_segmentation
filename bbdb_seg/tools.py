@@ -73,9 +73,10 @@ class ToolsMixin:
             colour = "#ff4040" if erase else "#ffff40"
         if self.cursor_id is None:
             self.cursor_id = self.canvas.create_oval(0, 0, 0, 0, outline=colour, width=2)
+            # Raise once when created; render_overlay/render_rois keep it on top.
+            self.canvas.tag_raise(self.cursor_id)
         self.canvas.coords(self.cursor_id, x - radius, y - radius, x + radius, y + radius)
         self.canvas.itemconfigure(self.cursor_id, outline=colour)
-        self.canvas.tag_raise(self.cursor_id)
 
     def on_motion(self, event: tk.Event) -> None:
         self.last_mouse = (event.x, event.y)

@@ -47,6 +47,7 @@ class IOMixin:
         self._reset_section_rois()
         self._set_initial_threshold_band(base_img)
         self._load_section_mask(height, width)
+        self._load_status()
         self._reset_section_view()
 
     def _reset_section_rois(self) -> None:
@@ -128,6 +129,8 @@ class IOMixin:
             "image": str(self.records.at[self.index, "image"]),
             "mask": str(self.records.at[self.index, "segmentation"]),
             "op": op,
+            "segmented": bool(self.segmented_status),
+            "stop_auto_confirm": bool(self.stop_auto_confirm),
             "roi_id": roi.roi_id if roi is not None else None,
             "roi": roi.bbox if roi is not None else None,
             "roi_shape": roi.shape if roi is not None else None,
@@ -172,7 +175,7 @@ class IOMixin:
         self.flush_mask()
         self.status_var.set("Saved")
         if self.pos == len(self.queue) - 1:
-            remaining = sum(not self.seg_path(i).exists() for i in self.queue)
+            remaining = sum(not self.status_for_index(i)[0] for i in self.queue)
             if remaining == 0:
                 messagebox.showinfo(APP_TITLE, f"All {len(self.queue)} images in this list are segmented.")
                 self.update_status()
@@ -191,7 +194,10 @@ class IOMixin:
         full = np.asarray(self.base_mask_img.resize((native_w, native_h), NEAREST))
         Image.fromarray((full > 0).astype(np.uint8)).save(out_path)
         self.mask_dirty = False
-        self.update_status()
+        if not self.stop_auto_confirm and not self.segmented_status:
+            self._set_segmented(True, auto=True)
+        else:
+            self.update_status()
 
     def schedule_csv_save(self) -> None:
         if self.pending_save_id is not None:
@@ -229,7 +235,7 @@ class IOMixin:
     def update_status(self) -> None:
         row = self.records.iloc[self.index]
         flip_display = self.flip if self.flip else "none"
-        remaining = sum(not self.seg_path(i).exists() for i in self.queue)
+        remaining = sum(not self.status_for_index(i)[0] for i in self.queue)
         self.position_var.set(f"{self.pos + 1} / {len(self.queue)}  ({remaining} left)")
         self.file_var.set(f"{row.get('group', '')}   {row['base']}")
         roi = self.active_roi()
@@ -245,10 +251,10 @@ class IOMixin:
             f"flip: {flip_display}    rotation: {self.rotation} x 90 ({self.rotation * 90:+d} deg)"
             f"    zoom: {self.zoom:.2f}x"
         )
-        if self.seg_path(self.index).exists():
+        if self.segmented_status:
             self.done_var.set("\u25cf segmented")
             self.done_label.configure(fg="#2ca02c")
         else:
-            self.done_var.set("\u25cb not saved")
+            self.done_var.set("\u25cb not segmented")
             self.done_label.configure(fg="#c0392b")
 
