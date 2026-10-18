@@ -27,5 +27,7 @@ LEGEND_BAND = 0.2        # top/bottom fraction of the slide where labels and sca
 LEGEND_MAX_AREA = 0.004  # legend blobs are smaller than this fraction of the image
 LEGEND_MARGIN = 2        # px grown around detected text to cover soft letter edges
 SMOOTH_STROKES = True    # default for the "Smooth strokes" checkbox
-SMOOTH_ALPHA = 0.35      # brush stabiliser: 1 = raw pointer, smaller = smoother
+ONE_EURO_MIN_CUTOFF = 1.0   # Hz; smoothing strength for slow strokes (lower = smoother)
+ONE_EURO_BETA = 0.05        # speed coefficient; higher = less lag on fast strokes
+ONE_EURO_D_CUTOFF = 1.0     # Hz; cutoff for the speed estimate
 LASSO_SMOOTH_ITERATIONS = 2  # Chaikin corner-cutting passes applied to lasso outlines

@@ -237,9 +237,14 @@ What this means for the threshold tool:
   scale bar and the credit line are detected automatically (small separate
   blobs in the top/bottom 20 % of the slide, not touching the section) and are
   never selected.
-- **Smooth strokes** (on by default): brush strokes follow the pointer with a
-  stabiliser that irons out hand jitter (the line catches up to where you
-  release), and lasso outlines are rounded before becoming an ROI.
+- **Smooth strokes** (on by default): brush strokes are smoothed with a
+  1-euro filter, which smooths slow, careful movements (where jitter shows) but
+  barely filters fast ones, so the line does not trail the pointer; it
+  finishes exactly where you release. Lasso outlines are rounded before
+  becoming an ROI.
+- While you drag, the stroke is previewed as a solid line drawn straight on
+  the canvas (red = draw, blue = erase), so painting stays responsive at any
+  zoom; the translucent mask overlay updates when you release.
 - **Overlay opacity** and **contrast** sliders change only what you see on
   screen.
 - Every mask-changing operation and every ROI action is appended to
