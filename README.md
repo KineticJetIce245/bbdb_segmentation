@@ -5,13 +5,17 @@ sections from many mammal species. The sections come from the **Brain
 Biodiversity Bank** (BBDB). The project includes a small desktop tool to make
 the work quick. Each section opens with a starting mask from an **Otsu-based
 intensity range**. You can move the minimum and maximum threshold sliders and
-then fix the mask with a brush, paint bucket and undo. The finished masks are
-saved as 0/1 PNGs in this repository so they can be committed and shared.
+then fix the mask with a brush, paint bucket and undo. You can also create
+several rectangular ROIs and give each one its own threshold range. The
+finished masks are saved as 0/1 PNGs in this repository, and every operation is
+appended to a `.ops.jsonl` log next to the mask, so masks can be committed and
+shared.
 
 The work is split into one CSV per **specimen and stain** (for example
 `csv/lion_nissl.csv`). Participants can each take one or more CSVs. A section
-counts as **done** once its mask file exists. Opening a CSV only shows the
-sections that are not done yet.
+counts as **done** once its mask file exists. By default, opening a CSV only
+shows the sections that are not done yet; tick **Review finished** to include
+already segmented sections.
 
 > **TL;DR:** for each section, paint the **cerebral cortex** (the grey matter
 > ribbon on the surface of the cerebral hemispheres) and nothing else. See
@@ -178,13 +182,20 @@ What this means for the threshold tool:
 ## Features
 
 - Opens only the sections in a CSV that **do not have a segmentation yet**, one
-  after another.
+  after another. Tick **Review finished** to include sections that already have
+  a mask, so you can inspect or modify them.
 - **Threshold min** and **Threshold max** build the mask from the image.
   Pixels inside the range `min <= value <= max` become `1`; pixels outside
   become `0`. The initial range is chosen from the image's **Otsu threshold**
   and whether the border is dark or bright.
 - **Invert** selects pixels *outside* the range instead. It starts off; the
   initial range already selects the non-background side.
+- **Shift+left-drag** creates a rectangular selection (ROI). You can create
+  several. **Shift+click** inside an ROI activates it; **Shift+click** outside
+  clears the active ROI; **Backspace** / **Delete** removes the active ROI.
+  Each ROI remembers its own threshold range and Invert setting. With an active
+  ROI, the threshold sliders only rewrite pixels inside that ROI; the rest of
+  the mask is preserved.
 - You can **draw** and **erase** with the brush, **clear** the mask, or
   **erode** / **dilate** it by one pixel.
 - A **paint bucket** fills a connected region of the mask in one click, for
@@ -199,7 +210,9 @@ What this means for the threshold tool:
   again. Zooming and panning change only the view, never the saved mask.
 - **Overlay opacity** and **contrast** sliders change only what you see on
   screen.
-- Your work **autosaves**, and you can quit and resume at any time.
+- Every mask-changing operation and every ROI action is appended to
+  `<section>.ops.jsonl` immediately. The PNG is written only when you press
+  **Enter**, **s**, **q**, or switch to another section.
 
 ---
 
@@ -212,7 +225,7 @@ common.py                   # shared flip/rotation and path helpers
 sect_info.csv               # specimen / species / stain / section metadata for every image
 requirements.txt            # Python dependencies
 csv/                        # one CSV per specimen_stain  (the GUI input; tracked in git)
-segmentations/              # saved masks, one folder per specimen_stain (tracked in git)
+segmentations/              # saved masks and .ops.jsonl logs (tracked in git), one folder per specimen_stain
 docs/                       # figures used in this README
 ```
 
@@ -357,7 +370,12 @@ If you run `python segment_gui.py` without a CSV, a file picker opens so you can
 choose one.
 
 If every section in the CSV already has a mask, the GUI asks whether you want to
-review them anyway. To always open every section, use `--all`.
+review them anyway. To always open every section, use `--all` or tick
+**Review finished** in the display controls.
+
+**Review finished** rebuilds the queue immediately. Unchecking it returns to
+unfinished sections only; if you are currently on a finished section, the GUI
+switches to the first unfinished one.
 
 ---
 
@@ -371,12 +389,13 @@ review them anyway. To always open every section, use `--all`.
 │ Brush ±  Accept & next (Enter)  ● segmented / ○ not saved                   │
 ├──────────────────────────────────────────────────────────────────────────┤
 │ Threshold min [====]  max [====]  Otsu  ☐ Invert  Otsu: 214  Opacity  Contrast … │ sliders
+│ Contrast …  Auto  Reset  ☐ Review finished                                  │ controls
 ├──────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │                section image with red mask overlay                       │ canvas
 │                                                                          │
 ├──────────────────────────────────────────────────────────────────────────┤
-│ 3 / 102 (99 left)   lion_nissl  1000lion6279   mask: threshold   flip… zoom…│ status
+│ 3 / 102 (99 left)   lion_nissl  1000lion6279   ROI: 2/3   flip… zoom…   │ status
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -384,10 +403,7 @@ The status bar shows:
 
 - your position in the list and how many sections are still left;
 - the section name;
-- where the mask came from:
-  - `threshold`: generated from the threshold range;
-  - `edited`: changed by hand;
-  - `saved`: loaded from an existing file;
+- the active ROI (`ROI: 2/3`, or `ROI: none`);
 - the flip/rotation and zoom currently applied.
 
 ### Threshold
@@ -395,14 +411,21 @@ The status bar shows:
 - When a section loads, the two threshold sliders are set to the initial
   Otsu-based band: `0–Otsu` if the image border is bright (dark tissue on a
   light background), or `Otsu–255` if the border is dark. **Invert** starts
-  unchecked.
-- Dragging either slider **rebuilds the mask from the image**. Pixels inside
-  `min <= value <= max` become `1`; pixels outside become `0`. With
-  **Invert** checked, pixels outside the range become `1` instead.
-- **Otsu (t)** resets both sliders to the initial band and turns **Invert** off.
-- Moving either slider or toggling Invert **replaces any brush edits**, so set
-  the range first and paint afterwards. If you move a slider by accident,
-  **Undo** brings your edits back; a whole slider drag counts as one step.
+  unchecked, and no ROI is active.
+- **Shift+left-drag** creates a rectangular ROI. It does **not** change the
+  mask; it only becomes the target for later threshold changes.
+- With an ROI active, dragging either slider **rebuilds the mask only inside
+  that ROI**. Pixels inside `min <= value <= max` become `1`; pixels outside the
+  range become `0`. The rest of the mask is left untouched. With **Invert**
+  checked, pixels outside the range become `1` instead.
+- **Shift+click** inside an existing ROI makes it active and loads that ROI's
+  own threshold settings into the sliders. **Shift+click** outside all ROIs
+  clears the active ROI; the sliders then use the global threshold.
+- **Backspace** / **Delete** removes the active ROI. The mask is not reverted.
+- **Otsu (t)** resets the active scope (ROI if one is active, otherwise the
+  whole image) to the initial band and turns **Invert** off.
+- Moving a slider or toggling Invert **replaces mask pixels inside the active
+  scope**; brush edits elsewhere are preserved. **Undo** still works.
 - Slider updates are coalesced (about every 30 ms) so dragging stays
   responsive. The latest value is always applied before you paint, save, or
   change section.
@@ -428,7 +451,10 @@ The status bar shows:
 | `[` / `]`      | Smaller / larger brush                         |
 | `+` / `=` / `-` | Zoom in / out at the mouse pointer            |
 | `0`            | Fit the image to the window                    |
-| `s`            | Save the current mask now                      |
+| Shift + left-drag | Create a rectangular ROI                     |
+| Shift + left-click | Activate an ROI / clear the active ROI     |
+| `Backspace` / `Delete` | Delete the active ROI                  |
+| `s`            | Save the current mask now (PNG)                |
 | `Esc` / `q`    | Save and quit                                  |
 
 ### Mouse
@@ -437,6 +463,8 @@ The status bar shows:
 | ------------------- | -------------------------------------------------- |
 | Left-click / drag   | Paint the mask (or erase if Mode is set to Erase)  |
 | Right-click / drag  | Erase the mask (always)                            |
+| Shift + left-drag   | Create a rectangular ROI                           |
+| Shift + left-click  | Activate an ROI / clear the active ROI             |
 | Left-click (Fill)   | Fill the connected region under the cursor         |
 | Right-click (Fill)  | Empty the connected region under the cursor        |
 | Mouse wheel         | Zoom in / out at the pointer                       |
@@ -475,14 +503,20 @@ values, or the saved mask. Zoom and pan also change only the view.
    with its Otsu range.
 2. Adjust **Threshold min** / **Threshold max** (and **Invert** if needed) until
    the mask is as close to the cerebral cortex as possible.
-3. Fix the rest by hand. Erase the white matter, cerebellum, brainstem and any
+3. For local corrections, **Shift+left-drag** a ROI first. Threshold changes
+   then only affect that ROI; other regions keep their current mask. Each ROI
+   keeps its own threshold settings. **Shift+click** an ROI to switch to it,
+   **Backspace** to delete the active one.
+4. Fix the rest by hand. Erase the white matter, cerebellum, brainstem and any
    text. Left-drag adds to the mask, right-drag removes from it, the **Fill**
    bucket fills holes, and `E`/`D` trims or grows the edges. Use **Undo**
    (Ctrl+Z) to back out a mistake.
-4. If the orientation looks wrong, use **Rotate** / **Flip**.
-5. Press **Enter** to save the mask and move to the next section. Unedited
-   masks are only saved when you press Enter. Any edit is also autosaved.
-6. You can quit at any time with `q`. When you re-open the same CSV, it shows
+5. If the orientation looks wrong, use **Rotate** / **Flip**.
+6. Press **Enter** to save the mask and move to the next section. The
+   operation log is written immediately; the PNG is written when you press
+   **Enter**, **s**, **q**, or switch sections. An unedited mask is only
+   written when you press Enter.
+7. You can quit at any time with `q`. When you re-open the same CSV, it shows
    only the sections that are still missing.
 
 ---
@@ -495,6 +529,18 @@ values, or the saved mask. Zoom and pan also change only the view.
     source image, with values `0` (background) and `1` (tissue).
   - The masks look black in normal image viewers because `1` is nearly black.
     This is expected.
+- **Operation log:** `segmentations/<specimen>_<stain>/<section>.ops.jsonl`,
+  one JSON object per line. It records ROI creation/activation/deletion,
+  threshold changes, brush strokes, fill, clear, erode/dilate, undo and view
+  transforms. Each record contains:
+  - `op`, `roi_id`, `roi` (`[top, left, bottom, right]`, bottom/right
+    exclusive), `roi_threshold`, `threshold`;
+  - `added` / `removed` pixel counts and the changed `bbox` for mask-changing
+    operations;
+  - the section name, image path, mask path and an ISO timestamp.
+- **Autosave:** the `.ops.jsonl` log is appended immediately. The PNG is not
+  written on every edit; it is written on **Enter**, **s**, **q**, or when you
+  switch to another section.
 - **Flip/rotation:** written back into the CSV you opened, in the `flip` column
   (empty, `LR`, `UP`, or `LR+UP`) and the `rotation` column (number of 90°
   steps).
@@ -518,8 +564,8 @@ CSV columns:
 
 ## Submitting your segmentations
 
-Commit the new masks and your CSV, then push them, or open a pull request if
-you don't have push access.
+Commit the new masks, their `.ops.jsonl` logs and your CSV, then push them, or
+open a pull request if you don't have push access.
 
 ```bash
 git pull
@@ -659,7 +705,7 @@ python segment_gui.py [CSV] [--data-root DIR] [--seg-root DIR] [--all]
 | `CSV`         | *(file picker if omitted)* | Group CSV to segment, e.g. `csv/lion_nissl.csv`.                   |
 | `--data-root` | auto-detected              | The `brain_biodiversity_bank` folder (contains `v.1/`).            |
 | `--seg-root`  | this repository            | Folder that the CSV `segmentation` paths are relative to.          |
-| `--all`       | off                        | Open every section, not just those without a segmentation.         |
+| `--all`       | off                        | Open every section, same as ticking **Review finished** at startup. |
 
 ---
 
@@ -696,7 +742,14 @@ The GUI needs a display. Run it locally, or use `ssh -X` or a remote desktop.
   load, it defines the initial threshold band; the two sliders move the lower
   and upper edge of that band.
 - Pixels inside the threshold range become `1`, pixels outside become `0`.
-  **Invert** swaps those two classes.
+  **Invert** swaps those two classes. When an ROI is active, only that
+  rectangle is rewritten; the rest of the mask is preserved.
+- ROIs are stored in base-image pixel coordinates. Their dashed boxes follow
+  zoom, pan, flips and rotations; the active ROI is drawn in a different
+  colour. Each ROI has its own threshold range and Invert setting.
+- Mask-changing operations and ROI actions are appended to
+  `<section>.ops.jsonl` as they happen. The PNG is written later, when you
+  save or leave the section.
 - Flips and rotations change only the display. Brush strokes are mapped back
   through the current transform, so the saved mask always lines up with the
   original image on disk.

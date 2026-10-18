@@ -10,6 +10,7 @@ skip themselves when Tk cannot connect to a display.
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -110,9 +111,6 @@ class SegmentGuiViewTests(unittest.TestCase):
         if app is None:
             return
         app.cancel_slider_updates()
-        if app.mask_save_after_id is not None:
-            app.after_cancel(app.mask_save_after_id)
-            app.mask_save_after_id = None
         app.destroy()
         self.app = None
 
@@ -244,11 +242,6 @@ class SegmentGuiViewTests(unittest.TestCase):
         after = np.asarray(self.app.base_mask_img)
         self.assertEqual(int(after[base]), 255)
         self.assertTrue(self.app.mask_dirty)
-        # This test is about coordinates, not writing a mask.
-        if self.app.mask_save_after_id is not None:
-            self.app.after_cancel(self.app.mask_save_after_id)
-            self.app.mask_save_after_id = None
-        self.app.mask_dirty = False
 
     def test_save_uses_native_size_after_zoom(self) -> None:
         x, y = self.center()
@@ -366,6 +359,195 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.assertEqual((self.app.contrast_min, self.app.contrast_max), expected)
         self.assertIsNone(self.app.slider_after_id)
         self.assertFalse(self.app.contrast_pending)
+
+    def test_roi_create_activates_without_changing_mask(self) -> None:
+        before = np.asarray(self.app.base_mask_img).copy()
+        self.app.create_roi(10, 10, 30, 30)
+
+        self.assertEqual(len(self.app.rois), 1)
+        self.assertEqual(self.app.active_roi_id, 1)
+        np.testing.assert_array_equal(before, np.asarray(self.app.base_mask_img))
+
+        path = self.app.ops_path(self.app.index)
+        self.assertTrue(path.is_file())
+        record = json.loads(path.read_text().splitlines()[-1])
+        self.assertEqual(record["op"], "roi_create")
+        self.assertEqual(record["roi"], [10, 10, 30, 30])
+
+    def test_threshold_updates_only_active_roi(self) -> None:
+        base = np.zeros((60, 80), dtype=np.uint8)
+        base[0:10, 0:10] = 255
+        self.app.base_mask_img = Image.fromarray(base)
+        self.app.create_roi(0, 40, 60, 80)
+
+        self.app.set_threshold_range(0, 255)
+        self.app.invert_var.set(False)
+        self.app.apply_threshold()
+
+        after = np.asarray(self.app.base_mask_img)
+        self.assertTrue(np.all(after[:, 40:] == 255))
+        np.testing.assert_array_equal(
+            after[0:10, 0:10],
+            np.full((10, 10), 255, dtype=np.uint8),
+        )
+        self.assertTrue(np.all(after[10:, :40] == 0))
+
+    def test_roi_activation_loads_its_threshold(self) -> None:
+        self.app.create_roi(5, 5, 20, 20)
+        self.app.set_threshold_range(10, 100)
+        self.app.create_roi(30, 30, 50, 60)
+        self.app.set_threshold_range(120, 200)
+
+        self.app.activate_roi(1)
+        self.assertEqual((self.app.threshold_min, self.app.threshold_max), (10, 100))
+        self.app.activate_roi(2)
+        self.assertEqual((self.app.threshold_min, self.app.threshold_max), (120, 200))
+
+    def test_delete_active_roi_restores_global_threshold(self) -> None:
+        global_range = (self.app.threshold_min, self.app.threshold_max)
+        self.app.create_roi(5, 5, 20, 20)
+        self.app.set_threshold_range(10, 100)
+        before = np.asarray(self.app.base_mask_img).copy()
+
+        self.app.delete_active_roi()
+
+        self.assertIsNone(self.app.active_roi_id)
+        self.assertEqual(self.app.rois, [])
+        self.assertEqual(
+            (self.app.threshold_min, self.app.threshold_max),
+            global_range,
+        )
+        np.testing.assert_array_equal(before, np.asarray(self.app.base_mask_img))
+
+    def test_backspace_deletes_active_roi(self) -> None:
+        self.app.create_roi(5, 5, 20, 20)
+        self.app.on_key(make_event(keysym="BackSpace"))
+        self.assertEqual(self.app.rois, [])
+        self.assertIsNone(self.app.active_roi_id)
+
+    def test_otsu_reset_updates_active_roi_not_global(self) -> None:
+        global_range = (self.app.threshold_min, self.app.threshold_max)
+        self.app.create_roi(5, 5, 20, 20)
+        self.app.set_threshold_range(100, 150)
+        self.app.invert_var.set(True)
+
+        self.app.reset_threshold()
+
+        roi = self.app.rois[0]
+        expected = (0, self.app.otsu) if self.app.bright_border else (self.app.otsu, 255)
+        self.assertEqual((roi.threshold_min, roi.threshold_max), expected)
+        self.assertFalse(roi.invert)
+        self.assertEqual(
+            (self.app.global_threshold_min, self.app.global_threshold_max),
+            global_range,
+        )
+
+    def test_ops_log_records_selection_and_threshold(self) -> None:
+        self.app.create_roi(0, 40, 60, 80)
+        self.app.set_threshold_range(0, 255)
+        self.app.apply_threshold()
+
+        path = self.app.ops_path(self.app.index)
+        records = [json.loads(line) for line in path.read_text().splitlines()]
+        ops = [record["op"] for record in records]
+        self.assertIn("roi_create", ops)
+        self.assertIn("threshold", ops)
+
+        threshold = next(record for record in records if record["op"] == "threshold")
+        self.assertEqual(threshold["roi_id"], 1)
+        self.assertEqual(threshold["threshold"], {"min": 0, "max": 255, "invert": False})
+        self.assertGreater(threshold["added"], 0)
+        self.assertIsNotNone(threshold["bbox"])
+
+    def test_ops_autosave_without_png(self) -> None:
+        self.app.base_mask_img = Image.fromarray(
+            np.zeros((60, 80), dtype=np.uint8)
+        )
+        x, y = self.center()
+        self.app.on_press(make_event(x, y), right=False)
+        self.app.end_stroke(make_event(x, y))
+
+        self.assertTrue(self.app.mask_dirty)
+        self.assertFalse(self.app.seg_path(self.app.index).exists())
+        path = self.app.ops_path(self.app.index)
+        self.assertTrue(path.is_file())
+        record = json.loads(path.read_text().splitlines()[-1])
+        self.assertEqual(record["op"], "draw")
+        self.assertGreater(record["added"], 0)
+        self.assertIsNotNone(record["bbox"])
+
+        self.app.mask_dirty = True
+        self.app.save_mask()
+        self.assertTrue(self.app.seg_path(self.app.index).exists())
+
+    def test_shift_drag_creates_roi_and_shift_click_reactivates(self) -> None:
+        offset_x, offset_y = self.app.display_offset
+        scale = self.app.display_scale
+        start = (int(offset_x + 20 * scale), int(offset_y + 20 * scale))
+        end = (start[0] + 40, start[1] + 30)
+
+        self.app.start_roi_select(make_event(*start))
+        self.app.drag_roi_select(make_event(*end))
+        self.app.end_roi_select(make_event(*end))
+
+        self.assertEqual(len(self.app.rois), 1)
+        self.assertEqual(self.app.active_roi_id, 1)
+        roi = self.app.rois[0]
+        rect = self.app._roi_screen_rect(roi)
+        centre = (int((rect[0] + rect[2]) / 2), int((rect[1] + rect[3]) / 2))
+
+        self.app.deactivate_roi()
+        self.assertIsNone(self.app.active_roi_id)
+
+        self.app.start_roi_select(make_event(*centre))
+        self.app.end_roi_select(make_event(*centre))
+        self.assertEqual(self.app.active_roi_id, roi.roi_id)
+
+    def test_review_finished_checkbox_rebuilds_queue(self) -> None:
+        # Add a second pending section to the in-memory records.
+        extra = self.app.records.iloc[0].copy()
+        extra["base"] = "two"
+        extra["section"] = "2"
+        extra["image"] = "v.1/sections/test_group/two.png"
+        extra["segmentation"] = "segmentations/test_group/two.png"
+        extra["flip"] = ""
+        extra["rotation"] = 0
+        self.app.records.loc[len(self.app.records)] = extra
+        Image.fromarray(np.full((60, 80), 100, dtype=np.uint8), "L").save(
+            self.data_root / "v.1" / "sections" / "test_group" / "two.png"
+        )
+
+        self.app.mask_dirty = True
+        self.app.save_mask()
+        self.assertEqual(self.app.queue, [0])
+
+        self.app.review_finished_var.set(True)
+        self.app.on_review_finished_change()
+        self.assertTrue(self.app.review_all)
+        self.assertEqual(self.app.queue, [0, 1])
+        self.assertEqual(self.app.index, 0)
+
+        self.app.review_finished_var.set(False)
+        self.app.on_review_finished_change()
+        self.assertFalse(self.app.review_all)
+        self.assertEqual(self.app.queue, [1])
+        self.assertEqual(self.app.index, 1)
+
+    def test_roi_display_mapping_matches_disp_index(self) -> None:
+        self.app.create_roi(5, 6, 15, 20)
+        base_w = self.app.base_img.shape[1]
+        for flip, rotation in (
+            ("", 0), ("LR", 0), ("UP", 0), ("LR+UP", 1), ("", 2), ("", 3),
+        ):
+            self.app.flip = flip
+            self.app.rotation = rotation
+            self.app.render_all()
+            for row, col in ((5, 6), (14, 19), (5, 19), (14, 6)):
+                disp_row, disp_col = self.app._base_to_display(row, col)
+                self.assertEqual(
+                    int(self.app.disp_index[disp_row, disp_col]),
+                    row * base_w + col,
+                )
 
 
 class PanClampTests(unittest.TestCase):

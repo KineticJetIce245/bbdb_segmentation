@@ -11,6 +11,11 @@ Features
   * Two threshold sliders select the intensity range ``min <= value <= max``.
     "Invert" selects pixels outside that range instead. The initial range is
     picked from the Otsu level and the image border (dark or bright background).
+  * Rectangular ROIs (Shift+drag), each with its own threshold settings. An
+    active ROI limits threshold changes to its rectangle; outside pixels are
+    preserved. Shift+click activates a ROI; Backspace deletes it.
+  * Every mask/ROI operation is appended to ``<mask>.ops.jsonl``. PNG masks are
+    written on Enter, s, q or when switching sections, not on every edit.
   * Paint (left drag) / erase (right drag), clear, erode, dilate.
   * Rotate / flip the view; the flip/rotation is recorded to the CSV, while the
     saved mask always stays aligned with the image on disk.
@@ -26,8 +31,11 @@ Usage
 from __future__ import annotations
 
 import argparse
+import json
 import math
 from collections import OrderedDict
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -64,6 +72,24 @@ MAX_VIEW_PIXELS = 12_000_000  # cap the rendered image so PhotoImage stays small
 SHIFT_MASK = 0x0001
 CONTROL_MASK = 0x0004
 SLIDER_UPDATE_MS = 30   # coalesce threshold/opacity/contrast slider events
+
+
+@dataclass
+class Roi:
+    """A rectangular selection in base-image pixel coordinates (r1/c1 exclusive)."""
+
+    roi_id: int
+    r0: int
+    c0: int
+    r1: int
+    c1: int
+    threshold_min: int
+    threshold_max: int
+    invert: bool
+
+    @property
+    def bbox(self) -> list[int]:
+        return [self.r0, self.c0, self.r1, self.c1]
 
 try:  # Pillow >= 9.1 moved the resampling filters onto Image.Resampling.
     NEAREST = Image.Resampling.NEAREST
@@ -146,6 +172,7 @@ class SegmentGui(tk.Tk):
         self.aborted = False
 
         self.seg_root = Path(seg_root_override).expanduser().resolve() if seg_root_override else TOOL_DIR
+        self.review_all = review_all
         resolved = self.resolve_inputs(csv_path, data_root_override, review_all)
         if resolved is None:
             self.aborted = True
@@ -172,8 +199,22 @@ class SegmentGui(tk.Tk):
         self.contrast_max = 255
         self.threshold_min = 0
         self.threshold_max = 255
+        self.global_threshold_min = 0
+        self.global_threshold_max = 255
+        self.global_invert = False
         self.bright_border = False
         self.otsu = 0
+        self.rois: list[Roi] = []
+        self.active_roi_id: int | None = None
+        self.next_roi_id = 1
+        self.roi_items: list[int] = []
+        self.roi_drag_item: int | None = None
+        self.roi_drag_start: tuple[int, int] | None = None
+        self.roi_dragging = False
+        self.roi_drag_moved = False
+        self.stroke_before: np.ndarray | None = None
+        self.stroke_op = "draw"
+        self.stroke_roi_id: int | None = None
         self.threshold_pending = False
         self.alpha_pending = False
         self.contrast_pending = False
@@ -201,7 +242,6 @@ class SegmentGui(tk.Tk):
         self.cursor_id: int | None = None
         self.resize_after_id: str | None = None
         self.pending_save_id: str | None = None
-        self.mask_save_after_id: str | None = None
 
         self.position_var = tk.StringVar()
         self.file_var = tk.StringVar()
@@ -212,6 +252,7 @@ class SegmentGui(tk.Tk):
         self.done_var = tk.StringVar()
         self.otsu_var = tk.StringVar()
         self.invert_var = tk.BooleanVar(value=False)
+        self.review_finished_var = tk.BooleanVar(value=False)
 
         self.geometry("1500x950")
         self.minsize(1000, 700)
@@ -279,14 +320,17 @@ class SegmentGui(tk.Tk):
         ]
         if review_all:
             queue = list(range(len(records)))
+            self.review_all = True
         elif pending:
             queue = pending
+            self.review_all = False
         elif messagebox.askyesno(
             APP_TITLE,
             f"All {len(records)} images in {csv_path.name} are already segmented.\n\nReview them anyway?",
             parent=self,
         ):
             queue = list(range(len(records)))
+            self.review_all = True
         else:
             return None
         if not (data_root / str(records.at[queue[0], "image"])).exists():
@@ -298,6 +342,45 @@ class SegmentGui(tk.Tk):
             )
             return None
         return csv_path, data_root, records, queue
+
+    def on_review_finished_change(self) -> None:
+        """Rebuild the work queue when the Review finished checkbox changes."""
+        include = bool(self.review_finished_var.get())
+        if include == self.review_all:
+            return
+
+        self.flush_slider_updates()
+        current = self.index
+        if include:
+            new_queue = list(range(len(self.records)))
+        else:
+            new_queue = [
+                i for i in range(len(self.records))
+                if not self.seg_path(i).exists()
+            ]
+            if current not in new_queue and new_queue:
+                # Leaving a finished section; preserve its edits before moving.
+                self.flush_mask()
+        if not new_queue:
+            self.review_finished_var.set(True)
+            self.review_all = True
+            self.update_status()
+            messagebox.showinfo(
+                APP_TITLE,
+                "There are no unfinished sections to show.",
+                parent=self,
+            )
+            return
+
+        self.review_all = include
+        self.queue = new_queue
+        if current in new_queue:
+            self.pos = new_queue.index(current)
+            self.update_status()
+        else:
+            self.pos = 0
+            self.index = new_queue[0]
+            self.load_current()
 
     # --- UI construction ---------------------------------------------------- #
     def build_ui(self) -> None:
@@ -381,6 +464,14 @@ class SegmentGui(tk.Tk):
         self.max_scale.pack(side="left", padx=(0, 8))
         ttk.Button(display_row, text="Auto", command=self.auto_contrast).pack(side="left", padx=(4, 4))
         ttk.Button(display_row, text="Reset", command=self.reset_contrast).pack(side="left")
+        self.review_finished_check = ttk.Checkbutton(
+            display_row, text="Review finished",
+            variable=self.review_finished_var,
+            command=self.on_review_finished_change,
+            takefocus=False,
+        )
+        self.review_finished_check.pack(side="left", padx=(10, 0))
+        self.review_finished_var.set(self.review_all)
         self.alpha_scale.set(self.overlay_alpha)
         self.min_scale.set(self.contrast_min)
         self.max_scale.set(self.contrast_max)
@@ -391,6 +482,9 @@ class SegmentGui(tk.Tk):
         self.canvas.bind("<ButtonPress-1>", lambda e: self.on_press(e, right=False))
         self.canvas.bind("<B1-Motion>", lambda e: self.on_drag(e, right=False))
         self.canvas.bind("<ButtonRelease-1>", self.end_stroke)
+        self.canvas.bind("<Shift-ButtonPress-1>", self.start_roi_select)
+        self.canvas.bind("<Shift-B1-Motion>", self.drag_roi_select)
+        self.canvas.bind("<Shift-ButtonRelease-1>", self.end_roi_select)
         self.canvas.bind("<ButtonPress-3>", lambda e: self.on_press(e, right=True))
         self.canvas.bind("<B3-Motion>", lambda e: self.on_drag(e, right=True))
         self.canvas.bind("<ButtonRelease-3>", self.end_stroke)
@@ -421,6 +515,7 @@ class SegmentGui(tk.Tk):
             "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase\n"
             "f: fill    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    [ ]: brush    s: save    "
             "Wheel: zoom    Shift+Wheel: brush    +/-: zoom    0: fit    Middle/Ctrl-drag: pan    Esc/q: quit\n"
+            "Shift-drag: new ROI    Shift-click: activate/clear ROI    Backspace/Delete: delete ROI\n"
             "(moving the threshold sliders replaces hand edits)"
         )
         ttk.Label(self, text=help_text, padding=(8, 2)).grid(row=4, column=0, sticky="w")
@@ -455,15 +550,25 @@ class SegmentGui(tk.Tk):
         height, width = base_img.shape
         self.base_index = np.arange(height * width, dtype=np.int32).reshape(height, width)
         self.cancel_slider_updates()
+        self.rois.clear()
+        self.active_roi_id = None
+        self.next_roi_id = 1
+        self.roi_dragging = False
+        self.roi_drag_start = None
+        self.roi_drag_moved = False
+        self.stroke_before = None
+        self.clear_roi_items()
 
         self.otsu = otsu_threshold(base_img)
         self.otsu_var.set(f"Otsu: {self.otsu}")
         self.bright_border = bright_background(base_img, self.otsu)
-        self.invert_var.set(False)
+        self.global_invert = False
         if self.bright_border:
-            self.set_threshold_range(0, self.otsu)
+            self.global_threshold_min, self.global_threshold_max = 0, self.otsu
         else:
-            self.set_threshold_range(self.otsu, 255)
+            self.global_threshold_min, self.global_threshold_max = self.otsu, 255
+        self.invert_var.set(False)
+        self.set_threshold_range(self.global_threshold_min, self.global_threshold_max)
 
         seg_path = self.seg_path(self.index)
         self.base_mask_img = None
@@ -492,6 +597,72 @@ class SegmentGui(tk.Tk):
         self.pan_last = None
         self.canvas.configure(cursor="crosshair" if self.tool == "fill" else "")
         self.render_all()
+
+    # --- operation log ------------------------------------------------------ #
+    def ops_path(self, index: int) -> Path:
+        seg = self.seg_path(index)
+        return seg.with_name(seg.stem + ".ops.jsonl")
+
+    @staticmethod
+    def mask_diff(
+        before: np.ndarray, after: np.ndarray
+    ) -> tuple[int, int, list[int] | None]:
+        changed = before != after
+        if not changed.any():
+            return 0, 0, None
+        added = int(((before == 0) & (after != 0)).sum())
+        removed = int(((before != 0) & (after == 0)).sum())
+        rows, cols = np.where(changed)
+        bbox = [
+            int(rows.min()),
+            int(cols.min()),
+            int(rows.max()) + 1,
+            int(cols.max()) + 1,
+        ]
+        return added, removed, bbox
+
+    def log_op(
+        self,
+        op: str,
+        *,
+        roi: Roi | None = None,
+        threshold: dict | None = None,
+        added: int = 0,
+        removed: int = 0,
+        bbox: list[int] | None = None,
+        extra: dict | None = None,
+    ) -> None:
+        """Append one operation record to <mask>.ops.jsonl."""
+        record = {
+            "time": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "section": str(self.records.at[self.index, "base"]),
+            "image": str(self.records.at[self.index, "image"]),
+            "mask": str(self.records.at[self.index, "segmentation"]),
+            "op": op,
+            "roi_id": roi.roi_id if roi is not None else None,
+            "roi": roi.bbox if roi is not None else None,
+            "roi_threshold": (
+                self._threshold_payload(
+                    roi,
+                    (self.threshold_min, self.threshold_max, bool(self.invert_var.get())),
+                )
+                if roi is not None
+                else None
+            ),
+            "threshold": threshold,
+            "added": int(added),
+            "removed": int(removed),
+            "bbox": bbox,
+        }
+        if extra:
+            record.update(extra)
+        path = self.ops_path(self.index)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+        except OSError as exc:
+            self.status_var.set(f"Could not write ops log: {exc}")
 
     # --- threshold ---------------------------------------------------------- #
     def cancel_slider_updates(self) -> None:
@@ -553,6 +724,47 @@ class SegmentGui(tk.Tk):
             binary = (self.base_img >= low) & (self.base_img <= high)
         return Image.fromarray(binary.astype(np.uint8) * 255)
 
+    def active_roi(self) -> Roi | None:
+        for roi in self.rois:
+            if roi.roi_id == self.active_roi_id:
+                return roi
+        return None
+
+    def _sync_threshold_scope(self) -> None:
+        roi = self.active_roi()
+        if roi is not None:
+            roi.threshold_min = self.threshold_min
+            roi.threshold_max = self.threshold_max
+            roi.invert = bool(self.invert_var.get())
+        else:
+            self.global_threshold_min = self.threshold_min
+            self.global_threshold_max = self.threshold_max
+            self.global_invert = bool(self.invert_var.get())
+
+    def _load_threshold_scope(self) -> None:
+        roi = self.active_roi()
+        if roi is not None:
+            low, high, invert = roi.threshold_min, roi.threshold_max, roi.invert
+        else:
+            low, high, invert = (
+                self.global_threshold_min,
+                self.global_threshold_max,
+                self.global_invert,
+            )
+        self.threshold_min = int(low)
+        self.threshold_max = int(high)
+        self.threshold_min_scale.set(self.threshold_min)
+        self.threshold_max_scale.set(self.threshold_max)
+        self.invert_var.set(bool(invert))
+
+    @staticmethod
+    def _threshold_payload(roi: Roi | None, fallback: tuple[int, int, bool]) -> dict:
+        if roi is not None:
+            low, high, invert = roi.threshold_min, roi.threshold_max, roi.invert
+        else:
+            low, high, invert = fallback
+        return {"min": int(low), "max": int(high), "invert": bool(invert)}
+
     def set_threshold_range(self, low: int, high: int) -> None:
         low = max(0, min(255, int(low)))
         high = max(0, min(255, int(high)))
@@ -562,14 +774,38 @@ class SegmentGui(tk.Tk):
         self.threshold_max = high
         self.threshold_min_scale.set(low)
         self.threshold_max_scale.set(high)
+        self._sync_threshold_scope()
 
     def apply_threshold(self) -> None:
-        if self.base_img is None:
+        if self.base_img is None or self.base_mask_img is None:
             return
         # A slider drag fires many updates; keep one undo step for the whole drag.
         if self.last_action != "threshold":
             self.push_undo("threshold")
-        self.base_mask_img = self.threshold_mask()
+        before = np.asarray(self.base_mask_img).copy()
+        thresholded = np.asarray(self.threshold_mask())
+        roi = self.active_roi()
+        if roi is not None:
+            after = before.copy()
+            after[roi.r0:roi.r1, roi.c0:roi.c1] = thresholded[
+                roi.r0:roi.r1, roi.c0:roi.c1
+            ]
+        else:
+            after = thresholded
+        self.base_mask_img = Image.fromarray(after)
+        added, removed, bbox = self.mask_diff(before, after)
+        if bbox is not None:
+            self.log_op(
+                "threshold",
+                roi=roi,
+                threshold=self._threshold_payload(
+                    roi, (self.threshold_min, self.threshold_max, bool(self.invert_var.get()))
+                ),
+                added=added,
+                removed=removed,
+                bbox=bbox,
+            )
+        self._sync_threshold_scope()
         self.mask_source = "threshold"
         self.mark_edited()
 
@@ -581,6 +817,7 @@ class SegmentGui(tk.Tk):
         if self.threshold_min > self.threshold_max:
             self.threshold_max = self.threshold_min
             self.threshold_max_scale.set(self.threshold_max)
+        self._sync_threshold_scope()
         self.schedule_slider_update("threshold")
 
     def on_threshold_max_change(self, value: str) -> None:
@@ -591,20 +828,23 @@ class SegmentGui(tk.Tk):
         if self.threshold_max < self.threshold_min:
             self.threshold_min = self.threshold_max
             self.threshold_min_scale.set(self.threshold_min)
+        self._sync_threshold_scope()
         self.schedule_slider_update("threshold")
 
     def reset_threshold(self) -> None:
         self.flush_slider_updates()
         self.invert_var.set(False)
         if self.bright_border:
-            self.set_threshold_range(0, self.otsu)
+            low, high = 0, self.otsu
         else:
-            self.set_threshold_range(self.otsu, 255)
+            low, high = self.otsu, 255
+        self.set_threshold_range(low, high)
         self.last_action = None
         self.apply_threshold()
 
     def on_invert_change(self) -> None:
         self.flush_slider_updates()
+        self._sync_threshold_scope()
         self.last_action = None
         self.apply_threshold()
 
@@ -612,12 +852,243 @@ class SegmentGui(tk.Tk):
         self.invert_var.set(not self.invert_var.get())
         self.on_invert_change()
 
+    # --- selections --------------------------------------------------------- #
+    def clear_roi_items(self) -> None:
+        if self.roi_drag_item is not None:
+            try:
+                self.canvas.delete(self.roi_drag_item)
+            except tk.TclError:
+                pass
+            self.roi_drag_item = None
+        for item in self.roi_items:
+            try:
+                self.canvas.delete(item)
+            except tk.TclError:
+                pass
+        self.roi_items.clear()
+
+    def _base_to_display(self, row: int, col: int) -> tuple[int, int]:
+        assert self.base_img is not None
+        height, width = self.base_img.shape
+        lr_flip, up_flip = decode_flip(self.flip)
+        if lr_flip:
+            col = width - 1 - col
+        if up_flip:
+            row = height - 1 - row
+        if self.rotation == 1:
+            return width - 1 - col, row
+        if self.rotation == 2:
+            return height - 1 - row, width - 1 - col
+        if self.rotation == 3:
+            return col, height - 1 - row
+        return row, col
+
+    def _roi_screen_rect(self, roi: Roi) -> tuple[float, float, float, float] | None:
+        if self.base_img is None or self.display_scale <= 0:
+            return None
+        corners = [
+            (roi.r0, roi.c0),
+            (roi.r0, roi.c1 - 1),
+            (roi.r1 - 1, roi.c0),
+            (roi.r1 - 1, roi.c1 - 1),
+        ]
+        display = [self._base_to_display(row, col) for row, col in corners]
+        rows = [point[0] for point in display]
+        cols = [point[1] for point in display]
+        offset_x, offset_y = self.display_offset
+        scale = self.display_scale
+        return (
+            offset_x + min(cols) * scale,
+            offset_y + min(rows) * scale,
+            offset_x + (max(cols) + 1) * scale,
+            offset_y + (max(rows) + 1) * scale,
+        )
+
+    def render_rois(self) -> None:
+        if self.base_img is None:
+            return
+        self.clear_roi_items()
+        for roi in self.rois:
+            rect = self._roi_screen_rect(roi)
+            if rect is None:
+                continue
+            x0, y0, x1, y1 = rect
+            active = roi.roi_id == self.active_roi_id
+            colour = "#00e5ff" if active else "#ffd400"
+            self.roi_items.append(
+                self.canvas.create_rectangle(
+                    x0, y0, x1, y1, outline=colour,
+                    width=3 if active else 2, dash=(6, 4),
+                )
+            )
+            self.roi_items.append(
+                self.canvas.create_text(
+                    x0 + 4, y0 + 2, text=f"R{roi.roi_id}", anchor="nw",
+                    fill=colour, font=("TkDefaultFont", 9, "bold"),
+                )
+            )
+        for item in self.roi_items:
+            self.canvas.tag_raise(item)
+        if self.cursor_id is not None:
+            self.canvas.tag_raise(self.cursor_id)
+
+    def _canvas_to_base_clamped(self, x: float, y: float) -> tuple[int, int] | None:
+        if self.base_img is None or self.display_scale <= 0:
+            return None
+        if self.disp_shape[0] <= 0 or self.disp_shape[1] <= 0:
+            return None
+        offset_x, offset_y = self.display_offset
+        right = offset_x + self.disp_shape[1] * self.display_scale
+        bottom = offset_y + self.disp_shape[0] * self.display_scale
+        x = min(max(x, offset_x), right - 1)
+        y = min(max(y, offset_y), bottom - 1)
+        return self.canvas_to_base(int(x), int(y))
+
+    def start_roi_select(self, event: tk.Event) -> None:
+        self.flush_slider_updates()
+        self.canvas.focus_set()
+        self.roi_dragging = True
+        self.roi_drag_start = (event.x, event.y)
+        self.roi_drag_moved = False
+        self.on_leave(None)
+        self.canvas.configure(cursor="tcross")
+        if self.roi_drag_item is not None:
+            self.canvas.delete(self.roi_drag_item)
+        self.roi_drag_item = self.canvas.create_rectangle(
+            event.x, event.y, event.x, event.y,
+            outline="#00e5ff", width=2, dash=(5, 4),
+        )
+
+    def drag_roi_select(self, event: tk.Event) -> None:
+        if not self.roi_dragging or self.roi_drag_start is None:
+            return
+        start_x, start_y = self.roi_drag_start
+        if abs(event.x - start_x) > 3 or abs(event.y - start_y) > 3:
+            self.roi_drag_moved = True
+        if self.roi_drag_item is not None:
+            self.canvas.coords(self.roi_drag_item, start_x, start_y, event.x, event.y)
+
+    def _handle_roi_click(self, x: float, y: float) -> None:
+        point = self._canvas_to_base_clamped(x, y)
+        if point is None:
+            return
+        row, col = point
+        hit = None
+        for roi in reversed(self.rois):
+            if roi.r0 <= row < roi.r1 and roi.c0 <= col < roi.c1:
+                hit = roi
+                break
+        if hit is not None:
+            if hit.roi_id != self.active_roi_id:
+                self.activate_roi(hit.roi_id)
+            return
+        if self.active_roi_id is not None:
+            self.deactivate_roi()
+
+    def end_roi_select(self, event: tk.Event) -> None:
+        if not self.roi_dragging:
+            return
+        start = self.roi_drag_start or (event.x, event.y)
+        moved = self.roi_drag_moved
+        self.roi_dragging = False
+        self.roi_drag_start = None
+        self.roi_drag_moved = False
+        if self.roi_drag_item is not None:
+            self.canvas.delete(self.roi_drag_item)
+            self.roi_drag_item = None
+        self.canvas.configure(cursor="crosshair" if self.tool == "fill" else "")
+
+        if not moved:
+            self._handle_roi_click(event.x, event.y)
+            return
+
+        start_point = self._canvas_to_base_clamped(*start)
+        end_point = self._canvas_to_base_clamped(event.x, event.y)
+        if start_point is None or end_point is None:
+            self.render_rois()
+            return
+        row0, row1 = sorted((start_point[0], end_point[0]))
+        col0, col1 = sorted((start_point[1], end_point[1]))
+        if row1 - row0 < 2 or col1 - col0 < 2:
+            self._handle_roi_click(event.x, event.y)
+            return
+        self.create_roi(row0, col0, row1 + 1, col1 + 1)
+
+    def create_roi(self, r0: int, c0: int, r1: int, c1: int) -> None:
+        self.flush_slider_updates()
+        roi = Roi(
+            self.next_roi_id,
+            int(r0), int(c0), int(r1), int(c1),
+            self.threshold_min,
+            self.threshold_max,
+            bool(self.invert_var.get()),
+        )
+        self.next_roi_id += 1
+        self.rois.append(roi)
+        self.active_roi_id = roi.roi_id
+        self.log_op(
+            "roi_create",
+            roi=roi,
+            threshold=self._threshold_payload(
+                roi, (self.threshold_min, self.threshold_max, bool(self.invert_var.get()))
+            ),
+        )
+        self.render_rois()
+        self.update_status()
+
+    def activate_roi(self, roi_id: int) -> None:
+        self.flush_slider_updates()
+        roi = next((item for item in self.rois if item.roi_id == roi_id), None)
+        if roi is None or self.active_roi_id == roi.roi_id:
+            return
+        self.active_roi_id = roi.roi_id
+        self._load_threshold_scope()
+        self.log_op(
+            "roi_activate",
+            roi=roi,
+            threshold=self._threshold_payload(roi, (self.threshold_min, self.threshold_max, bool(self.invert_var.get()))),
+        )
+        self.render_rois()
+        self.update_status()
+
+    def deactivate_roi(self) -> None:
+        self.flush_slider_updates()
+        roi = self.active_roi()
+        if roi is None:
+            return
+        self.active_roi_id = None
+        self._load_threshold_scope()
+        self.log_op(
+            "roi_deactivate",
+            roi=roi,
+            threshold=self._threshold_payload(roi, (self.threshold_min, self.threshold_max, bool(self.invert_var.get()))),
+        )
+        self.render_rois()
+        self.update_status()
+
+    def delete_active_roi(self) -> None:
+        self.flush_slider_updates()
+        roi = self.active_roi()
+        if roi is None:
+            return
+        self.rois.remove(roi)
+        self.active_roi_id = None
+        self._load_threshold_scope()
+        self.log_op(
+            "roi_delete",
+            roi=roi,
+            threshold=self._threshold_payload(roi, (self.threshold_min, self.threshold_max, bool(self.invert_var.get()))),
+        )
+        self.render_rois()
+        self.update_status()
+
     # --- rendering ---------------------------------------------------------- #
     def render_all(self) -> None:
         if self.base_img is None:
             return
         self.render_background()
         self.render_overlay()
+        self.render_rois()
         self.update_status()
 
     def canvas_size(self) -> tuple[int, int]:
@@ -688,6 +1159,8 @@ class SegmentGui(tk.Tk):
             self.canvas.itemconfigure(self.ov_id, image=self.ov_photo)
             self.canvas.coords(self.ov_id, offset_x, offset_y)
         self.canvas.tag_raise(self.ov_id)
+        for item in self.roi_items:
+            self.canvas.tag_raise(item)
         if self.cursor_id is not None:
             self.canvas.tag_raise(self.cursor_id)
 
@@ -840,6 +1313,10 @@ class SegmentGui(tk.Tk):
             self.canvas.move(self.bg_id, move_x, move_y)
         if self.ov_id is not None:
             self.canvas.move(self.ov_id, move_x, move_y)
+        for item in self.roi_items:
+            self.canvas.move(item, move_x, move_y)
+        if self.roi_drag_item is not None:
+            self.canvas.move(self.roi_drag_item, move_x, move_y)
 
     def end_pan(self, _event: tk.Event | None = None) -> None:
         if not self.panning:
@@ -853,6 +1330,9 @@ class SegmentGui(tk.Tk):
     def on_press(self, event: tk.Event, right: bool) -> None:
         self.flush_slider_updates()
         self.canvas.focus_set()
+        if event.state & SHIFT_MASK:
+            self.start_roi_select(event)
+            return
         if event.state & CONTROL_MASK:
             self.start_pan(event)
             return
@@ -861,9 +1341,18 @@ class SegmentGui(tk.Tk):
             return
         self.last_pt = None
         self.stroke_pushed = False
+        self.stroke_before = np.asarray(self.base_mask_img).copy()
+        self.stroke_op = "erase" if (right or self.tool == "erase") else "draw"
+        self.stroke_roi_id = self.active_roi_id
         self.continue_stroke(event, right or self.tool == "erase")
 
     def on_drag(self, event: tk.Event, right: bool) -> None:
+        if self.roi_dragging:
+            self.drag_roi_select(event)
+            return
+        if event.state & SHIFT_MASK:
+            self.start_roi_select(event)
+            return
         if self.panning:
             self.pan_drag(event)
             return
@@ -897,15 +1386,36 @@ class SegmentGui(tk.Tk):
             self.schedule_slider_update("overlay")
 
     def end_stroke(self, _event: tk.Event | None = None) -> None:
+        if self.roi_dragging:
+            if _event is not None:
+                self.end_roi_select(_event)
+            return
         if self.panning:
             self.end_pan(_event)
             return
         self.flush_slider_updates()
         self.last_pt = None
+        before = self.stroke_before
+        self.stroke_before = None
+        if before is not None:
+            after = np.asarray(self.base_mask_img)
+            added, removed, bbox = self.mask_diff(before, after)
+            if bbox is not None:
+                roi = next(
+                    (item for item in self.rois if item.roi_id == self.stroke_roi_id),
+                    None,
+                )
+                self.log_op(
+                    self.stroke_op,
+                    roi=roi,
+                    added=added,
+                    removed=removed,
+                    bbox=bbox,
+                )
+        self.stroke_roi_id = None
         if self.mask_dirty:
             self.mask_source = "edited"
             self.update_status()
-            self.schedule_mask_save()
 
     def bucket_fill(self, event: tk.Event, value: int) -> None:
         """Set the 4-connected mask region under the cursor to ``value``."""
@@ -918,8 +1428,19 @@ class SegmentGui(tk.Tk):
             return
         labels, _ = ndimage.label(mask == mask[row, col])
         self.push_undo("fill")
+        before = mask.copy()
         mask[labels == labels[row, col]] = value
         self.base_mask_img = Image.fromarray(mask)
+        added, removed, bbox = self.mask_diff(before, mask)
+        if bbox is not None:
+            self.log_op(
+                "fill",
+                roi=self.active_roi(),
+                added=added,
+                removed=removed,
+                bbox=bbox,
+                extra={"value": int(value)},
+            )
         self.mask_source = "edited"
         self.mark_edited()
 
@@ -935,7 +1456,17 @@ class SegmentGui(tk.Tk):
         if not self.undo_stack:
             self.status_var.set("Nothing to undo")
             return
+        before = np.asarray(self.base_mask_img).copy()
         self.base_mask_img = self.undo_stack.pop()
+        added, removed, bbox = self.mask_diff(before, np.asarray(self.base_mask_img))
+        if bbox is not None:
+            self.log_op(
+                "undo",
+                roi=self.active_roi(),
+                added=added,
+                removed=removed,
+                bbox=bbox,
+            )
         self.last_action = None
         self.mask_source = "edited"
         self.mark_edited()
@@ -944,14 +1475,23 @@ class SegmentGui(tk.Tk):
         self.mask_dirty = True
         self.render_overlay()
         self.update_status()
-        self.schedule_mask_save()
 
     def clear_mask(self) -> None:
         self.flush_slider_updates()
         if self.base_mask_img is None:
             return
+        before = np.asarray(self.base_mask_img).copy()
         self.push_undo("clear")
         self.base_mask_img.paste(0, (0, 0, self.base_mask_img.width, self.base_mask_img.height))
+        added, removed, bbox = self.mask_diff(before, np.asarray(self.base_mask_img))
+        if bbox is not None:
+            self.log_op(
+                "clear",
+                roi=self.active_roi(),
+                added=added,
+                removed=removed,
+                bbox=bbox,
+            )
         self.mask_source = "edited"
         self.mark_edited()
 
@@ -961,8 +1501,18 @@ class SegmentGui(tk.Tk):
         if self.base_mask_img is None:
             return
         kernel = ImageFilter.MaxFilter(3) if grow else ImageFilter.MinFilter(3)
+        before = np.asarray(self.base_mask_img).copy()
         self.push_undo("morphology")
         self.base_mask_img = self.base_mask_img.filter(kernel)
+        added, removed, bbox = self.mask_diff(before, np.asarray(self.base_mask_img))
+        if bbox is not None:
+            self.log_op(
+                "dilate" if grow else "erode",
+                roi=self.active_roi(),
+                added=added,
+                removed=removed,
+                bbox=bbox,
+            )
         self.mask_source = "edited"
         self.mark_edited()
 
@@ -979,6 +1529,7 @@ class SegmentGui(tk.Tk):
         self.rotation = normalize_rotation(rotation)
         self.records.at[self.index, "flip"] = self.flip
         self.records.at[self.index, "rotation"] = self.rotation
+        self.log_op("transform", extra={"flip": self.flip, "rotation": self.rotation})
         self.render_all()
         self.schedule_csv_save()
 
@@ -1031,7 +1582,7 @@ class SegmentGui(tk.Tk):
 
     def on_motion(self, event: tk.Event) -> None:
         self.last_mouse = (event.x, event.y)
-        if self.panning:
+        if self.panning or self.roi_dragging:
             return
         if self.tool != "fill":
             self.update_cursor(event.x, event.y, self.tool == "erase")
@@ -1073,9 +1624,6 @@ class SegmentGui(tk.Tk):
         self.move(1)
 
     def flush_mask(self) -> None:
-        if self.mask_save_after_id is not None:
-            self.after_cancel(self.mask_save_after_id)
-            self.mask_save_after_id = None
         self.save_mask()
 
     def on_key(self, event: tk.Event) -> None:
@@ -1097,6 +1645,8 @@ class SegmentGui(tk.Tk):
             self.erode_mask()
         elif key == "D":
             self.dilate_mask()
+        elif key in ("BackSpace", "Delete"):
+            self.delete_active_roi()
         elif char == "t":
             self.reset_threshold()
         elif char == "i":
@@ -1143,17 +1693,6 @@ class SegmentGui(tk.Tk):
         self.mask_dirty = False
         self.update_status()
 
-    def schedule_mask_save(self) -> None:
-        if self.mask_save_after_id is not None:
-            self.after_cancel(self.mask_save_after_id)
-        self.mask_save_after_id = self.after(SAVE_DEBOUNCE_MS, self.run_mask_save)
-        self.status_var.set("Saving...")
-
-    def run_mask_save(self) -> None:
-        self.mask_save_after_id = None
-        self.save_mask()
-        self.status_var.set("Saved")
-
     def schedule_csv_save(self) -> None:
         if self.pending_save_id is not None:
             self.after_cancel(self.pending_save_id)
@@ -1195,7 +1734,15 @@ class SegmentGui(tk.Tk):
         remaining = sum(not self.seg_path(i).exists() for i in self.queue)
         self.position_var.set(f"{self.pos + 1} / {len(self.queue)}  ({remaining} left)")
         self.file_var.set(f"{row.get('group', '')}   {row['base']}")
-        self.mask_src_var.set(f"mask: {self.mask_source}")
+        roi = self.active_roi()
+        if roi is None:
+            self.mask_src_var.set(f"ROI: none ({len(self.rois)})" if self.rois else "ROI: none")
+        else:
+            index = next(
+                (i + 1 for i, item in enumerate(self.rois) if item.roi_id == roi.roi_id),
+                0,
+            )
+            self.mask_src_var.set(f"ROI: {index}/{len(self.rois)}")
         self.state_var.set(
             f"flip: {flip_display}    rotation: {self.rotation} x 90 ({self.rotation * 90:+d} deg)"
             f"    zoom: {self.zoom:.2f}x"
