@@ -255,11 +255,11 @@ What this means for the threshold tool:
   instead of spilling over it, while in uniform tissue the whole stroke is
   kept (edges weaker than 10 gray levels/px are ignored). Erasing works the
   same way: the eraser stops at a strong edge and leaves the cortex beyond it.
-  Background and legend are never painted. The live preview shows the raw
+  Background and legend are never painted. While you drag you see the raw
   stroke; the snapped result appears on release.
-- While you drag, the stroke is previewed as a solid line drawn straight on
-  the canvas (red = draw, blue = erase), so painting stays responsive at any
-  zoom; the translucent mask overlay updates when you release.
+- While you drag, the mask overlay itself updates under the brush (painting
+  adds red, erasing removes it). Only the small area around the newest stroke
+  segment is redrawn, so painting stays responsive at any zoom.
 - **Overlay opacity** and **contrast** sliders change only what you see on
   screen.
 - Every mask-changing operation and every ROI action is appended to
