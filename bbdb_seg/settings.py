@@ -47,3 +47,13 @@ PICK_MAX_HOLE = 400      # px; holes up to this size inside a picked block are f
 BLOCK_COLOUR = (15, 35, 170)  # transparent dark blue: regions rejected with the colour picker
 BLOCK_ALPHA_GAIN = 1.4        # blue is drawn a bit more opaque than the red mask so it reads on pale tissue
 BG_CHROMA_TOLERANCE = 4  # colour units (blue vs red/green, red vs green); tinted pixels are tissue, not background
+
+# --- UNet predictions ------------------------------------------------------- #
+UNET_OUTPUT_DIR = "UNet_output"   # inside segmentations/, one <group>/<base>.png per prediction
+UNET_MODEL_DIR = "bbdb_model_504"
+UNET_PYTHON = ".venv-nnunet/bin/python"
+UNET_CHECKPOINT = "checkpoint_final.pth"
+UNET_DEVICE = "auto"
+UNET_POLL_MS = 100
+UNET_PREDICTION_COLOUR = (255, 205, 0)   # yellow: model output, distinct from the red manual mask
+UNET_BADGE_COLOUR = "#ffd600"             # same yellow for the status-line "predicted"

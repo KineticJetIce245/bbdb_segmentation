@@ -285,6 +285,40 @@ What this means for the threshold tool:
   `<section>.ops.jsonl` immediately. The PNG is written only when you press
   **Enter**, **s**, **q**, or switch to another section.
 
+### UNet starting masks
+
+The packaged 504 model can propose the cortex before you edit:
+
+- **Use model** starts a persistent nnU-Net worker from `.venv-nnunet`. The
+  first start loads the checkpoint (several seconds); later sections only pay
+  for inference.
+- Opening a section that has **no saved mask** runs the model automatically
+  (or reuses its cached prediction) and paints it **yellow**. Where the status
+  line normally says `○ not segmented`, it now says `○ predicted` in yellow.
+  The first manual edit turns the mask back to red and restores
+  `○ not segmented`.
+- **Run UNet** re-runs the model on the current section at any time and shows
+  the prediction in yellow on top of the manual mask.
+- **Use prediction** accepts that prediction as the working mask: the overlay
+  turns red (it is no longer a draft) while the status keeps saying
+  `○ predicted`; it is one undo step. If a mask is already saved, the GUI asks
+  first. The button then changes to **Save prediction**, which writes the PNG
+  immediately, drops the predicted state and marks the section **Segmented**.
+  Editing before saving restores **Use prediction**, so the model result can be
+  re-applied.
+- **Load prediction** shows the cached prediction for the current section
+  without starting the model (works even when **Use model** is unticked). On a
+  section with no saved mask it becomes the yellow starting mask; on a saved
+  section it is only a preview until **Use prediction**.
+- **Clear prediction** deletes this section's cached PNG under
+  `segmentations/UNet_output/`. It never touches the manual mask; a mask
+  already accepted from that prediction stays as a normal edited mask.
+- Predictions are cached under `segmentations/UNet_output/<group>/<base>.png`.
+  They are never written into the manual tree until you accept them.
+- This needs the extracted `bbdb_model_504/` package and the `.venv-nnunet`
+  environment (see `nnunet_tools/README.md`). Without them the checkbox reports
+  the missing path and the rest of the GUI keeps working.
+
 ---
 
 ## Repository layout
@@ -296,6 +330,7 @@ bbdb_seg/                       # Python package (implementation)
   ui.py                         # Tk widget construction
   session.py                    # image/mask loading, saving and queue I/O
   status.py                     # manual segmented status and stop autolog
+  unet.py                       # UNet worker lifecycle, prediction cache and overwrite
   clean.py                      # background detection, edge snapping, island removal (pure)
   cleaning.py                   # Exclude background/legend, Clean (k), edge-aware brush glue, hand-edit memory
   history.py                    # undo/redo for mask and selection edits
@@ -321,9 +356,11 @@ segment_gui.py                  # compatibility entry point -> bbdb_seg.app
 make_segmentation_csvs.py       # compatibility entry point -> bbdb_seg.make_csvs
 sect_info.csv                   # specimen / species / stain / section metadata for every image
 requirements.txt                # Python dependencies
+nnunet_tools/                   # training/export scripts and predict_worker.py (own .venv-nnunet)
 tests/                          # unittest suite
 csv/                            # one CSV per specimen_stain  (the GUI input; tracked in git)
 segmentations/                  # saved masks and .ops.jsonl logs, one folder per specimen_stain (git-ignored; shared separately)
+  UNet_output/                  # cached model predictions, <group>/<base>.png (never manual masks)
 docs/                           # figures used in this README
 ```
 
@@ -643,6 +680,9 @@ values, or the saved mask. Zoom and pan also change only the view.
     source image, with values `0` (background) and `1` (tissue).
   - The masks look black in normal image viewers because `1` is nearly black.
     This is expected.
+- **UNet predictions:** `segmentations/UNet_output/<specimen>_<stain>/<section>.png`.
+  Cached model output, also 0/1 at native resolution. It is never treated as a
+  finished manual mask; delete the folder to force fresh predictions.
 - **Operation log:** `segmentations/<specimen>_<stain>/<section>.ops.jsonl`,
   one JSON object per line. It records ROI creation/activation/deletion,
   threshold changes, brush strokes, fill, clear, erode/dilate, undo and view
@@ -831,13 +871,17 @@ python make_segmentation_csvs.py --data-root /path/to/brain_biodiversity_bank
 
 ```
 python segment_gui.py [CSV] [--data-root DIR] [--seg-root DIR]
+                      [--unet-model DIR] [--unet-python PYTHON] [--unet-device DEVICE]
 ```
 
-| Option        | Default                    | Description                                                        |
-| ------------- | -------------------------- | ------------------------------------------------------------------ |
-| `CSV`         | *(file picker if omitted)* | Group CSV to segment, e.g. `csv/lion_nissl.csv`.                   |
-| `--data-root` | auto-detected              | The `brain_biodiversity_bank` folder (contains `v.1/`).            |
-| `--seg-root`  | this repository            | Folder that the CSV `segmentation` paths are relative to.          |
+| Option          | Default                    | Description                                                        |
+| --------------- | -------------------------- | ------------------------------------------------------------------ |
+| `CSV`           | *(file picker if omitted)* | Group CSV to segment, e.g. `csv/lion_nissl.csv`.                   |
+| `--data-root`   | auto-detected              | The `brain_biodiversity_bank` folder (contains `v.1/`).            |
+| `--seg-root`    | this repository            | Folder that the CSV `segmentation` paths are relative to.          |
+| `--unet-model`  | `bbdb_model_504`           | Extracted model package or trainer folder.                         |
+| `--unet-python` | `.venv-nnunet/bin/python`  | Interpreter of the nnU-Net environment.                            |
+| `--unet-device` | `auto`                     | `auto`, `mps`, `cuda` or `cpu`, passed to the worker.              |
 
 ---
 
