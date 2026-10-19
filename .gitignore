@@ -4,7 +4,11 @@ __pycache__/
 .venv/
 venv/
 env/
+.venv-nnunet/
 .ipynb_checkpoints/
+
+# nnU-Net training outputs (large; regenerate with the scripts in nnunet_tools/)
+nnUNet/
 
 # Source image data (large; distributed separately)
 brain_biodiversity_bank*/
@@ -28,3 +32,6 @@ prepare_human_autoradiography/
 
 # Mask PNGs and edit logs are shared separately, not committed with the code
 segmentations/
+
+# torch leaves a compile cache next to the working directory
+torchinductor_*/
