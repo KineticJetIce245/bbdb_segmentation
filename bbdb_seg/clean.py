@@ -25,6 +25,7 @@ from scipy import ndimage
 from .settings import (
     BG_CHROMA_TOLERANCE,
     BG_MARGIN,
+    BG_MAX_TOLERANCE,
     BG_TOLERANCE,
     CLEAN_BAND,
     CLEAN_MIN_ISLAND,
@@ -81,7 +82,12 @@ def background_mask(
     border = _border(gray)
     level = float(np.median(border))
     spread = float(np.median(np.abs(border - level)))  # robust border noise
-    tol = max(float(tolerance or 0), 3.0 * spread)
+    # Cap the automatic widening: a border that is not a single level (tissue
+    # running into the crop, a two-tone mount) has a huge spread, and an
+    # unlimited 3*spread tolerance then reaches both tones and marks the whole
+    # slide as background -- every brush stroke would be erased on release.
+    auto = min(3.0 * spread, float(BG_MAX_TOLERANCE))
+    tol = max(float(tolerance or 0), auto)
     bg = np.abs(gray.astype(np.float32) - level) <= tol
     if rgb is not None and np.asarray(rgb).shape[:2] == gray.shape and np.asarray(rgb).ndim == 3:
         colour = np.asarray(rgb, dtype=np.float32)

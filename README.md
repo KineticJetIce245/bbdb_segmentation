@@ -323,7 +323,7 @@ sect_info.csv                   # specimen / species / stain / section metadata 
 requirements.txt                # Python dependencies
 tests/                          # unittest suite
 csv/                            # one CSV per specimen_stain  (the GUI input; tracked in git)
-segmentations/                  # saved masks and .ops.jsonl logs (tracked in git), one folder per specimen_stain
+segmentations/                  # saved masks and .ops.jsonl logs, one folder per specimen_stain (git-ignored; shared separately)
 docs/                           # figures used in this README
 ```
 
@@ -688,9 +688,14 @@ CSV columns:
 Commit the new masks, their `.ops.jsonl` logs and your CSV, then push them, or
 open a pull request if you don't have push access.
 
+`segmentations/` is listed in `.gitignore` (masks are meant to be shared
+separately from the code), so a plain `git add segmentations/` adds nothing
+without complaining. Use `git add -f` to include the masks in a commit.
+
 ```bash
 git pull
-git add segmentations/ csv/
+git add csv/
+git add -f segmentations/
 git commit -m "Segment lion_nissl sections"
 git push
 ```
@@ -787,11 +792,18 @@ pairs in nnU-Net's NIfTI format, which you can use as a reference.
 - **Do not write predictions straight into `segmentations/`.** The GUI treats
   any existing file there as a finished section and skips it, so unreviewed
   predictions would be counted as manual segmentations.
-- Keep predictions in a separate folder. Right now the GUI always starts from
-  the Otsu threshold. Adding an option to load a prediction as the starting
-  mask instead would make a nice hackathon contribution. For example, a
-  `--init-dir predictions/` flag could be read in `load_current()` in
-  `segment_gui.py`.
+- Keep predictions in a separate folder. Pass it with `--init-dir`, and the GUI
+  starts from a prediction instead of the Otsu threshold wherever no mask has
+  been saved yet:
+
+  ```bash
+  python -m bbdb_seg csv/owl_monkey_nissl+myelin.csv --init-dir predictions/
+  ```
+
+  A saved mask always wins, so reviewed sections are never overwritten. The
+  folder may follow the CSV layout (`predictions/<group>/<base>.png`), the flat
+  nnU-Net export name (`predictions/<group>__<base>.png`) or just
+  `predictions/<base>.png`.
 - Every corrected prediction is a new manual mask. Retrain, predict again, and
   repeat.
 

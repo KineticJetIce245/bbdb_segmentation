@@ -298,7 +298,6 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.assertTrue(values.issubset({0, 1}))
         self.assertIn(0, values)
         self.assertIn(1, values)
-
     def test_threshold_range_is_inclusive_and_invert_selects_outside(self) -> None:
         self.app.base_img = np.array([[99, 100, 150, 151]], dtype=np.uint8)
         self.app.set_threshold_range(100, 150)
@@ -350,18 +349,29 @@ class SegmentGuiViewTests(unittest.TestCase):
         self.assertFalse(self.app.threshold_pending)
         self.assertIsNone(self.app.slider_after_id)
 
-    def test_painting_coalesces_overlay_updates(self) -> None:
+    def test_painting_previews_without_raster_renders(self) -> None:
+        # Since the live vector preview landed, a stroke no longer schedules a
+        # raster overlay render: the overlay is drawn once, when the stroke ends.
+        renders: list[int] = []
+        original = self.app.render_overlay
+
+        def counting(*args, **kwargs):
+            renders.append(1)
+            return original(*args, **kwargs)
+
+        self.app.render_overlay = counting
         x, y = self.center()
         self.app.on_press(make_event(x, y), right=False)
         self.app.on_drag(make_event(x + 5, y + 5), right=False)
 
-        self.assertTrue(self.app.overlay_pending)
-        self.assertIsNotNone(self.app.slider_after_id)
+        self.assertEqual(renders, [])          # nothing rendered mid-stroke
+        self.assertFalse(self.app.overlay_pending)
         # The mask itself is updated immediately; only the overlay is deferred.
         point = self.app.canvas_to_base(x + 5, y + 5)
         self.assertEqual(int(np.asarray(self.app.base_mask_img)[point]), 255)
 
         self.app.end_stroke(make_event(x + 5, y + 5))
+        self.assertEqual(len(renders), 1)      # exactly one raster render
         self.assertFalse(self.app.overlay_pending)
         self.assertIsNone(self.app.slider_after_id)
 
@@ -794,7 +804,10 @@ class SegmentGuiViewTests(unittest.TestCase):
     def test_toolbar_is_split_into_two_rows(self) -> None:
         toolbar = self.app.grid_slaves(row=0, column=0)[0]
         rows = toolbar.winfo_children()
-        self.assertEqual(len(rows), 2)
+        # The contract is the width, not the exact row count: the toolbar gained
+        # a third row with the colour-picker options, and the bound catches the
+        # regression that matters (everything back on one very wide row).
+        self.assertGreaterEqual(len(rows), 2)
         self.assertLessEqual(toolbar.winfo_reqwidth(), 1450)
 
     def test_queue_menu_filters_by_segmented_status(self) -> None:

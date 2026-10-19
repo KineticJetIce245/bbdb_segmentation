@@ -40,6 +40,15 @@ class BackgroundTests(unittest.TestCase):
         self.assertTrue(bg[0, 0])
         self.assertFalse(bg[ndimage.binary_erosion(ring, iterations=2)].any())
 
+    def test_two_tone_border_does_not_blank_the_slide(self) -> None:
+        # Left half dark, right half bright: the border median sits between the
+        # two tones. An unlimited tolerance then reaches both of them and marks
+        # every pixel as background, which erased each brush stroke on release.
+        img = np.full((60, 80), 220, np.uint8)
+        img[:, :40] = 30
+        bg = background_mask(img)
+        self.assertLess(bg.mean(), 0.5)
+
 
 class ColourBackgroundTests(unittest.TestCase):
     def test_cream_rim_is_tissue_with_colour_background_without(self) -> None:

@@ -21,6 +21,33 @@ class IOMixin:
     def seg_path(self, index: int) -> Path:
         return resolve_path(self.seg_root, self.records.at[index, "segmentation"])
 
+    def init_mask_path(self, index: int) -> Path | None:
+        """Predicted starting mask for a section, or None if there is none.
+
+        A prediction is only a starting point: the caller never uses it when a
+        mask has already been saved. The first existing candidate wins:
+        the CSV layout (``<init-dir>/<group>/<base>.png``), a folder prepared
+        like ``segmentations/`` (``<init-dir>/segmentations/<group>/<base>.png``),
+        the flat name nnU-Net exports (``<init-dir>/<group>__<base>.png``), then
+        ``<init-dir>/<base>.png``.
+        """
+        init_dir = getattr(self, "init_dir", None)
+        if init_dir is None:
+            return None
+        base = self.records.at[index, "base"]
+        group = self.records.at[index, "group"] if "group" in self.records.columns else ""
+        candidates = []
+        if group:
+            candidates.append(init_dir / str(group) / f"{base}.png")
+        candidates.append(resolve_path(init_dir, self.records.at[index, "segmentation"]))
+        if group:
+            candidates.append(init_dir / f"{group}__{base}.png")
+        candidates.append(init_dir / f"{base}.png")
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        return None
+
     def get_base_img(self, index: int) -> tuple[np.ndarray, tuple[int, int]]:
         if index in self.cache:
             self.cache.move_to_end(index)
@@ -87,6 +114,14 @@ class IOMixin:
                 self.mask_source = "saved"
             except Exception:
                 self.base_mask_img = None
+        if self.base_mask_img is None:
+            init_path = self.init_mask_path(self.index)
+            if init_path is not None:
+                try:
+                    self.base_mask_img = Image.fromarray(load_mask_work(init_path, (height, width)))
+                    self.mask_source = "prediction"
+                except Exception:
+                    self.base_mask_img = None
         if self.base_mask_img is None:
             self.base_mask_img = self.threshold_mask()
             self.mask_source = "threshold"
