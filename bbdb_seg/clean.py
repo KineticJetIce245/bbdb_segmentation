@@ -291,26 +291,32 @@ def colour_region(
     open_radius: int = PICK_OPEN,
     min_region: int = PICK_MIN_REGION,
     max_hole: int = PICK_MAX_HOLE,
+    smoothed: np.ndarray | None = None,
 ) -> tuple[np.ndarray, float, float]:
     """Colour picker: pixels with the same gray level as the scribbled ones.
 
     The gray range is centred on the scribbled pixels' dominant gray level
     (histogram peak, so a scribble straying over an edge does not matter), with
     a half-width of ``spread`` robust SDs clipped to [``min_spread``,
-    ``max_spread``], measured on an image smoothed with ``sigma`` so
-    grain and noise do not punch holes. An opening of ``open_radius`` cuts thin
-    bridges (pale cortical layers have nearly the same gray level as white
-    matter in Nissl) and regions under ``min_region`` px are dropped. With
-    ``connected`` (the GUI's behaviour) every continuous block of that gray
-    level touched by the scribble is returned; otherwise every matching block
-    in the image. Blocks are solid: holes up to ``max_hole`` px inside them
-    (vessels, dark streaks, grain) are filled, larger enclosed areas are left
-    alone. Background pixels are never returned. Returns (bool mask, low, high).
+    ``max_spread``], measured on an image smoothed with ``sigma`` so grain and
+    noise do not punch holes. An opening of ``open_radius`` cuts thin bridges
+    (pale cortical layers have nearly the same gray level as white matter in
+    Nissl) and regions under ``min_region`` px are dropped. With ``connected``
+    (the GUI's behaviour) every continuous block of that gray level touched by
+    the scribble is returned; otherwise every matching block in the image.
+    Blocks are solid: holes up to ``max_hole`` px inside them (vessels, dark
+    streaks, grain) are filled, larger enclosed areas are left alone.
+    Background pixels are never returned. ``smoothed`` may pass a cached copy of
+    the smoothed image. Returns (bool mask, low, high).
     """
     scribble = np.asarray(scribble, dtype=bool)
     empty = np.zeros(scribble.shape, bool)
-    smooth = ndimage.gaussian_filter(np.asarray(gray, dtype=np.float32), sigma) if sigma > 0 \
-        else np.asarray(gray, dtype=np.float32)
+    if smoothed is not None:
+        smooth = smoothed
+    elif sigma > 0:
+        smooth = ndimage.gaussian_filter(np.asarray(gray, dtype=np.float32), sigma)
+    else:
+        smooth = np.asarray(gray, dtype=np.float32)
     usable = scribble if background is None else scribble & ~background
     if not usable.any():
         return empty, 0.0, 0.0
@@ -325,25 +331,49 @@ def colour_region(
     robust_sd = 1.4826 * float(np.median(np.abs(core - centre))) if core.size else 0.0
     half = float(np.clip(spread * robust_sd, min_spread, max_spread))
     low, high = centre - half, centre + half
-    region = (smooth >= low) & (smooth <= high)
+
+    raw = (smooth >= low) & (smooth <= high)
     if background is not None:
-        region &= ~background
-    if open_radius > 0:
-        region = ndimage.binary_opening(region, structure=_disk(open_radius))
-    region = remove_small_islands(region, min_region)
+        raw &= ~background
+    window = (slice(None), slice(None))
     if connected:
-        labels, _count = ndimage.label(region)
-        hit = np.unique(labels[usable & region])
+        # Opening only shrinks blocks, so the answer lies inside the raw blocks
+        # touched by the scribble: do the expensive steps in their bounding box.
+        raw_labels, _count = ndimage.label(raw)
+        touched = np.unique(raw_labels[usable & raw])
+        touched = touched[touched > 0]
+        if not len(touched):
+            return empty, low, high
+        rows, cols = np.where(np.isin(raw_labels, touched))
+        pad = open_radius + 2
+        window = (slice(max(0, rows.min() - pad), min(raw.shape[0], rows.max() + pad + 1)),
+                  slice(max(0, cols.min() - pad), min(raw.shape[1], cols.max() + pad + 1)))
+    sub = raw[window]
+    if open_radius > 0:
+        sub = ndimage.binary_opening(sub, structure=_disk(open_radius))
+    sub = remove_small_islands(sub, min_region)
+    if connected:
+        labels, _count = ndimage.label(sub)
+        hit = np.unique(labels[usable[window] & sub])
         hit = hit[hit > 0]
-        region = np.isin(labels, hit) if len(hit) else empty
-    if max_hole > 0 and region.any():
-        holes = ndimage.binary_fill_holes(region) & ~region
-        hole_labels, count = ndimage.label(holes)
-        if count:
-            sizes = np.bincount(hole_labels.ravel())
-            small = sizes <= max_hole
-            small[0] = False
-            region |= small[hole_labels]
+        sub = np.isin(labels, hit) if len(hit) else np.zeros(sub.shape, bool)
+    sub = _fill_small_holes(sub, max_hole)
     if background is not None:
-        region &= ~background
+        sub = sub & ~background[window]
+    region = empty
+    region[window] = sub
     return region, low, high
+
+
+def _fill_small_holes(region: np.ndarray, max_hole: int) -> np.ndarray:
+    """Fill enclosed holes of at most ``max_hole`` px."""
+    if max_hole <= 0 or not region.any():
+        return region
+    holes = ndimage.binary_fill_holes(region) & ~region
+    hole_labels, count = ndimage.label(holes)
+    if count:
+        sizes = np.bincount(hole_labels.ravel())
+        small = sizes <= max_hole
+        small[0] = False
+        region = region | small[hole_labels]
+    return region

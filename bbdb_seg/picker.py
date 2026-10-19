@@ -17,9 +17,11 @@ import tkinter as tk
 
 import numpy as np
 from PIL import Image, ImageDraw
+from scipy import ndimage
 
 from .clean import colour_region
 from .image_ops import mask_diff as diff_masks
+from .settings import PICK_SIGMA
 
 PICK_INCLUDE_COLOUR = "#ffff40"
 PICK_EXCLUDE_COLOUR = "#40c4ff"
@@ -70,6 +72,15 @@ class PickMixin:
         self.log_op("clear_blue", extra={"cleared_px": removed})
         self.render_overlay()
         self.status_var.set(f"Cleared {removed} blue (rejected) px (Ctrl+Z to undo)")
+
+    def _pick_smoothed(self) -> np.ndarray:
+        """Smoothed copy of the section image, computed once per section."""
+        key = id(self.base_img)
+        if getattr(self, "_pick_smooth_key", None) != key:
+            self._pick_smooth_cache = ndimage.gaussian_filter(
+                np.asarray(self.base_img, dtype=np.float32), PICK_SIGMA)
+            self._pick_smooth_key = key
+        return self._pick_smooth_cache
 
     def toggle_pick(self) -> None:
         self.set_tool("draw" if self.tool == "pick" else "pick")
@@ -126,6 +137,7 @@ class PickMixin:
         region, low, high = colour_region(
             self.base_img, scribble,
             background=self.current_background(strict=True),
+            smoothed=self._pick_smoothed(),
         )
         roi = self.active_roi()
         if roi is not None:
