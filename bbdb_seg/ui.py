@@ -65,7 +65,6 @@ class UiMixin:
             ("Smooth strokes", self.smooth_var, None),
             ("Snap brush to edges", self.snap_brush_var, None),
             ("Keep brush strokes (Clean)", self.keep_strokes_var, None),
-            ("Pick whole image", self.pick_whole_var, None),
         )
         for text, var, command in options:
             kwargs = {"command": command} if command is not None else {}

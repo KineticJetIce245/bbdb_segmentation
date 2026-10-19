@@ -100,6 +100,17 @@ class ColourPickTests(unittest.TestCase):
         self.assertLess(region[layer1].mean(), 0.05)       # thin pale layer spared
         self.assertTrue(190 < low < 205 < high < 225)
 
+    def test_blocks_are_solid_but_big_enclosed_areas_stay(self) -> None:
+        img, wm_a, _wm_b, _layer1 = nissl_like()
+        img = img.copy()
+        img[50:53, 40:43] = 120                    # vessel inside white matter A
+        img[40:80, 52:62] = 150                    # large cortex island inside A (400 px)
+        img = img.astype(np.uint8)
+        scribble = np.zeros(img.shape, bool); scribble[85, 30:60] = True
+        region, _low, _high = colour_region(img, scribble, background=img > 240, max_hole=100)
+        self.assertTrue(region[50:53, 40:43].all())         # small hole filled
+        self.assertFalse(region[44:76, 55:59].any())        # big enclosed island kept out
+
     def test_whole_image_takes_every_matching_region(self) -> None:
         img, wm_a, wm_b, layer1 = nissl_like()
         scribble = np.zeros(img.shape, bool); scribble[60, 30:60] = True

@@ -59,7 +59,6 @@ from .ui import UiMixin
 from .paths import REPO_ROOT
 from .settings import (
     KEEP_BRUSH_STROKES,
-    PICK_WHOLE_IMAGE,
     SMOOTH_STROKES,
     SNAP_BRUSH,
     APP_TITLE,
@@ -206,7 +205,6 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         self.smooth_var = tk.BooleanVar(value=SMOOTH_STROKES)
         self.keep_strokes_var = tk.BooleanVar(value=KEEP_BRUSH_STROKES)
         self.snap_brush_var = tk.BooleanVar(value=SNAP_BRUSH)
-        self.pick_whole_var = tk.BooleanVar(value=PICK_WHOLE_IMAGE)
         self.segmented_var = tk.BooleanVar(value=False)
         self.stop_auto_confirm_var = tk.BooleanVar(value=False)
         self.queue_filter_var = tk.StringVar(value="all")

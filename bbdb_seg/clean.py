@@ -31,6 +31,7 @@ from .settings import (
     LEGEND_MARGIN,
     LEGEND_MAX_AREA,
     PICK_MIN_REGION,
+    PICK_MAX_HOLE,
     PICK_MAX_SPREAD,
     PICK_MIN_SPREAD,
     PICK_OPEN,
@@ -289,6 +290,7 @@ def colour_region(
     sigma: float = PICK_SIGMA,
     open_radius: int = PICK_OPEN,
     min_region: int = PICK_MIN_REGION,
+    max_hole: int = PICK_MAX_HOLE,
 ) -> tuple[np.ndarray, float, float]:
     """Colour picker: pixels with the same gray level as the scribbled ones.
 
@@ -299,9 +301,11 @@ def colour_region(
     grain and noise do not punch holes. An opening of ``open_radius`` cuts thin
     bridges (pale cortical layers have nearly the same gray level as white
     matter in Nissl) and regions under ``min_region`` px are dropped. With
-    ``connected`` only regions touched by the scribble are returned (a "magic
-    wand"); otherwise every matching region in the image. Background pixels are
-    never returned. Returns (bool mask, low, high).
+    ``connected`` (the GUI's behaviour) every continuous block of that gray
+    level touched by the scribble is returned; otherwise every matching block
+    in the image. Blocks are solid: holes up to ``max_hole`` px inside them
+    (vessels, dark streaks, grain) are filled, larger enclosed areas are left
+    alone. Background pixels are never returned. Returns (bool mask, low, high).
     """
     scribble = np.asarray(scribble, dtype=bool)
     empty = np.zeros(scribble.shape, bool)
@@ -332,4 +336,14 @@ def colour_region(
         hit = np.unique(labels[usable & region])
         hit = hit[hit > 0]
         region = np.isin(labels, hit) if len(hit) else empty
+    if max_hole > 0 and region.any():
+        holes = ndimage.binary_fill_holes(region) & ~region
+        hole_labels, count = ndimage.label(holes)
+        if count:
+            sizes = np.bincount(hole_labels.ravel())
+            small = sizes <= max_hole
+            small[0] = False
+            region |= small[hole_labels]
+    if background is not None:
+        region &= ~background
     return region, low, high

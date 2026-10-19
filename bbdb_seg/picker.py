@@ -1,9 +1,9 @@
 """Colour picker tool (p): scribble over an area to include or exclude every
 region of that gray level.
 
-Left-drag includes, right-drag excludes. By default only regions connected to
-the scribble change ("magic wand"); with "Pick whole image" ticked, every
-matching region does. An active selection limits the change to the selection.
+Left-drag includes, right-drag excludes: every continuous block of that gray
+level touched by the scribble changes as one solid piece (small holes inside a
+block are filled). An active selection limits the change to the selection.
 """
 from __future__ import annotations
 
@@ -80,11 +80,9 @@ class PickMixin:
         else:
             draw.line([(c, r) for r, c in points], fill=255, width=1)
         scribble = np.asarray(scribble_img) > 0
-        whole = bool(self.pick_whole_var.get()) if hasattr(self, "pick_whole_var") else False
         region, low, high = colour_region(
             self.base_img, scribble,
             background=self.current_background(strict=True),
-            connected=not whole,
         )
         roi = self.active_roi()
         if roi is not None:
@@ -105,11 +103,10 @@ class PickMixin:
         self.base_mask_img = Image.fromarray(after)
         self.record_hand_edit(before, after, "draw" if self.pick_include else "erase")
         self.log_op("pick", roi=roi, added=added, removed=removed, bbox=bbox,
-                    extra={"mode": verb, "gray_range": [round(low, 1), round(high, 1)],
-                           "whole_image": whole})
+                    extra={"mode": verb, "gray_range": [round(low, 1), round(high, 1)]})
         self.mask_source = "edited"
         self.mark_edited()
         self.status_var.set(
-            f"Colour pick: {verb} gray {low:.0f}-{high:.0f} "
-            f"({'whole image' if whole else 'touched regions'}): -{removed} / +{added} px (Ctrl+Z to undo)"
+            f"Colour pick: {verb} gray {low:.0f}-{high:.0f} blocks: "
+            f"-{removed} / +{added} px (Ctrl+Z to undo)"
         )
