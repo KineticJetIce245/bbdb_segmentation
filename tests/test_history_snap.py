@@ -7,7 +7,7 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 
-from bbdb_seg.clean import _disk, snap_stroke
+from bbdb_seg.clean import _disk, colour_region, snap_stroke
 from bbdb_seg.history import HistoryMixin
 from bbdb_seg.roi import Roi
 from tests.test_clean import _FakeGui, _Var, ring_image
@@ -70,6 +70,42 @@ class SnapStrokeTests(unittest.TestCase):
         footprint, core = stroke(img.shape, (50, 40), (50, 70), 6)
         out = snap_stroke(img, np.zeros(img.shape, bool), footprint, core, True, excluded=excluded)
         self.assertFalse((out & excluded).any())
+
+
+def nissl_like() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """White background, two white-matter blobs (205), cortex (150) with a thin
+    pale outer layer (200) that has almost the white-matter gray level."""
+    rng = np.random.default_rng(3)
+    img = np.full((120, 160), 250.0)
+    tissue = np.zeros(img.shape, bool); tissue[10:110, 10:150] = True
+    img[tissue] = 150
+    layer1 = tissue & ~ndimage.binary_erosion(tissue, iterations=3)   # 3 px pale rim
+    img[layer1] = 200
+    wm_a = np.zeros(img.shape, bool); wm_a[30:90, 25:65] = True
+    wm_b = np.zeros(img.shape, bool); wm_b[30:90, 95:135] = True
+    img[wm_a | wm_b] = 205
+    img = np.clip(ndimage.gaussian_filter(img, 1.0) + rng.normal(0, 3, img.shape), 0, 255)
+    return img.astype(np.uint8), wm_a, wm_b, layer1
+
+
+class ColourPickTests(unittest.TestCase):
+    def test_wand_takes_touched_region_and_spares_pale_cortex(self) -> None:
+        img, wm_a, wm_b, layer1 = nissl_like()
+        scribble = np.zeros(img.shape, bool); scribble[60, 30:60] = True
+        scribble[60, 18:24] = True                     # strays into dark cortex
+        region, low, high = colour_region(img, scribble, background=img > 240)
+        inner_a = ndimage.binary_erosion(wm_a, iterations=2)
+        self.assertGreater(region[inner_a].mean(), 0.95)   # white matter A taken
+        self.assertFalse(region[wm_b].any())               # B not touched by scribble
+        self.assertLess(region[layer1].mean(), 0.05)       # thin pale layer spared
+        self.assertTrue(190 < low < 205 < high < 225)
+
+    def test_whole_image_takes_every_matching_region(self) -> None:
+        img, wm_a, wm_b, layer1 = nissl_like()
+        scribble = np.zeros(img.shape, bool); scribble[60, 30:60] = True
+        region, _low, _high = colour_region(img, scribble, background=img > 240, connected=False)
+        self.assertGreater(region[ndimage.binary_erosion(wm_b, iterations=2)].mean(), 0.95)
+        self.assertLess(region[layer1].mean(), 0.05)
 
 
 class _HistGui(HistoryMixin):

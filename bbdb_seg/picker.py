@@ -1,0 +1,115 @@
+"""Colour picker tool (p): scribble over an area to include or exclude every
+region of that gray level.
+
+Left-drag includes, right-drag excludes. By default only regions connected to
+the scribble change ("magic wand"); with "Pick whole image" ticked, every
+matching region does. An active selection limits the change to the selection.
+"""
+from __future__ import annotations
+
+import tkinter as tk
+
+import numpy as np
+from PIL import Image, ImageDraw
+
+from .clean import colour_region
+from .image_ops import mask_diff as diff_masks
+
+PICK_INCLUDE_COLOUR = "#ffff40"
+PICK_EXCLUDE_COLOUR = "#40c4ff"
+
+
+class PickMixin:
+
+    def _init_pick_state(self) -> None:
+        self.pick_dragging = False
+        self.pick_points: list[tuple[int, int]] = []
+        self.pick_include = False
+        self.pick_line_id: int | None = None
+        self.pick_screen: list[float] = []
+
+    def toggle_pick(self) -> None:
+        self.set_tool("draw" if self.tool == "pick" else "pick")
+
+    def start_pick(self, event: tk.Event, right: bool) -> None:
+        self.canvas.focus_set()
+        self.pick_dragging = True
+        self.pick_include = not right
+        self.pick_points = []
+        self.pick_screen = []
+        self._cancel_pick_line()
+        self.drag_pick(event)
+
+    def drag_pick(self, event: tk.Event) -> None:
+        if not self.pick_dragging:
+            return
+        point = self.canvas_to_base(event.x, event.y)
+        if point is not None:
+            self.pick_points.append(point)
+        self.pick_screen += [event.x, event.y]
+        colour = PICK_INCLUDE_COLOUR if self.pick_include else PICK_EXCLUDE_COLOUR
+        coords = self.pick_screen if len(self.pick_screen) >= 4 else self.pick_screen * 2
+        if self.pick_line_id is None:
+            self.pick_line_id = self.canvas.create_line(*coords, fill=colour, width=2,
+                                                        capstyle="round", joinstyle="round")
+        else:
+            self.canvas.coords(self.pick_line_id, *coords)
+        if getattr(self, "cursor_id", None) is not None:
+            self.canvas.tag_raise(self.cursor_id)
+
+    def _cancel_pick_line(self) -> None:
+        if self.pick_line_id is not None:
+            self.canvas.delete(self.pick_line_id)
+            self.pick_line_id = None
+
+    def end_pick(self, _event: tk.Event | None = None) -> None:
+        if not self.pick_dragging:
+            return
+        self.pick_dragging = False
+        self._cancel_pick_line()
+        points, self.pick_points = self.pick_points, []
+        self.pick_screen = []
+        if not points or self.base_img is None or self.base_mask_img is None:
+            return
+        self.flush_slider_updates()
+        height, width = self.base_img.shape
+        scribble_img = Image.new("L", (width, height), 0)
+        draw = ImageDraw.Draw(scribble_img)
+        if len(points) == 1:
+            draw.point([(points[0][1], points[0][0])], fill=255)
+        else:
+            draw.line([(c, r) for r, c in points], fill=255, width=1)
+        scribble = np.asarray(scribble_img) > 0
+        whole = bool(self.pick_whole_var.get()) if hasattr(self, "pick_whole_var") else False
+        region, low, high = colour_region(
+            self.base_img, scribble,
+            background=self.current_background(strict=True),
+            connected=not whole,
+        )
+        roi = self.active_roi()
+        if roi is not None:
+            region &= roi.mask_array(height, width)
+        before = np.asarray(self.base_mask_img).copy()
+        after = before.copy()
+        if self.pick_include:
+            after[region] = 255
+            after = self.exclude_background(after, strict=True)
+        else:
+            after[region] = 0
+        added, removed, bbox = diff_masks(before, after)
+        verb = "include" if self.pick_include else "exclude"
+        if bbox is None:
+            self.status_var.set(f"Colour pick ({verb}, gray {low:.0f}-{high:.0f}): nothing to change")
+            return
+        self.push_undo("pick")
+        self.base_mask_img = Image.fromarray(after)
+        self.record_hand_edit(before, after, "draw" if self.pick_include else "erase")
+        self.log_op("pick", roi=roi, added=added, removed=removed, bbox=bbox,
+                    extra={"mode": verb, "gray_range": [round(low, 1), round(high, 1)],
+                           "whole_image": whole})
+        self.mask_source = "edited"
+        self.mark_edited()
+        self.status_var.set(
+            f"Colour pick: {verb} gray {low:.0f}-{high:.0f} "
+            f"({'whole image' if whole else 'touched regions'}): -{removed} / +{added} px (Ctrl+Z to undo)"
+        )

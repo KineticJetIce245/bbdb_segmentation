@@ -11,7 +11,7 @@ DEFAULT_BRUSH = 14       # brush radius in on-screen pixels
 MIN_BRUSH = 2
 MAX_BRUSH = 120
 UNDO_LIMIT = 30
-TOOLS = ("draw", "erase", "fill", "select")
+TOOLS = ("draw", "erase", "fill", "select", "pick")
 ZOOM_STEP = 1.25         # one wheel notch / key press
 MIN_ZOOM = 0.25          # relative to the fit-to-window scale
 MAX_ZOOM = 8.0
@@ -36,3 +36,10 @@ SNAP_BRUSH = True        # default for "Snap brush to edges": brush strokes sett
 SNAP_RING = 3            # px ring just outside a stroke used as "not this label" watershed markers
 SNAP_CORE_FRACTION = 1 / 3  # stroke centre line (this fraction of the brush radius) is always kept
 SNAP_EDGE_MIN = 10.0     # gray levels/px; weaker edges than this do not trim a stroke
+PICK_SIGMA = 1.5         # px; the image is smoothed before colour picking (ignores grain/noise)
+PICK_SPREAD = 2.5        # picked range = median +/- this many robust SDs of the scribbled pixels
+PICK_MIN_SPREAD = 8.0    # gray levels; minimum half-width of the picked range
+PICK_MAX_SPREAD = 18.0   # gray levels; maximum half-width of the picked range
+PICK_OPEN = 2            # px; opening radius that cuts thin bridges (e.g. pale cortical layers)
+PICK_MIN_REGION = 50     # px; picked regions smaller than this are ignored
+PICK_WHOLE_IMAGE = False # default for "Pick whole image" (off = only regions under the scribble)

@@ -54,6 +54,9 @@ class PaintMixin:
             else:
                 self.start_brush_select(event)
             return
+        if self.tool == "pick":
+            self.start_pick(event, right)
+            return
         self.last_pt = None
         self.reset_smoothing()
         self.stroke_pushed = False
@@ -65,6 +68,9 @@ class PaintMixin:
         self.continue_stroke(event, right or self.tool == "erase")
 
     def on_drag(self, event: tk.Event, right: bool) -> None:
+        if getattr(self, "pick_dragging", False):
+            self.drag_pick(event)
+            return
         if self.brush_erase_dragging:
             self.drag_brush_erase(event)
             return
@@ -89,7 +95,7 @@ class PaintMixin:
         if event.state & CONTROL_MASK:
             self.start_pan(event)
             return
-        if self.tool != "fill":
+        if self.tool not in ("fill", "pick"):
             self.continue_stroke(event, right or self.tool == "erase")
 
     def continue_stroke(self, event: tk.Event, erase: bool) -> None:
@@ -117,6 +123,9 @@ class PaintMixin:
         self.draw_stroke_preview(sx, sy, erase)
 
     def end_stroke(self, _event: tk.Event | None = None) -> None:
+        if getattr(self, "pick_dragging", False):
+            self.end_pick(_event)
+            return
         if self.brush_erase_dragging:
             if _event is not None:
                 self.end_brush_erase(_event)

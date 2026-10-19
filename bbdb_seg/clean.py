@@ -30,6 +30,12 @@ from .settings import (
     LEGEND_BAND,
     LEGEND_MARGIN,
     LEGEND_MAX_AREA,
+    PICK_MIN_REGION,
+    PICK_MAX_SPREAD,
+    PICK_MIN_SPREAD,
+    PICK_OPEN,
+    PICK_SIGMA,
+    PICK_SPREAD,
     SNAP_EDGE_MIN,
     SNAP_RING,
 )
@@ -269,3 +275,61 @@ def snap_stroke(
         labels = ndimage.watershed_ift(np.round(elevation / peak * 65535).astype(np.uint16), markers)
     result[win] = (labels == 2) & fp
     return result
+
+
+def colour_region(
+    gray: np.ndarray,
+    scribble: np.ndarray,
+    *,
+    background: np.ndarray | None = None,
+    connected: bool = True,
+    spread: float = PICK_SPREAD,
+    min_spread: float = PICK_MIN_SPREAD,
+    max_spread: float = PICK_MAX_SPREAD,
+    sigma: float = PICK_SIGMA,
+    open_radius: int = PICK_OPEN,
+    min_region: int = PICK_MIN_REGION,
+) -> tuple[np.ndarray, float, float]:
+    """Colour picker: pixels with the same gray level as the scribbled ones.
+
+    The gray range is centred on the scribbled pixels' dominant gray level
+    (histogram peak, so a scribble straying over an edge does not matter), with
+    a half-width of ``spread`` robust SDs clipped to [``min_spread``,
+    ``max_spread``], measured on an image smoothed with ``sigma`` so
+    grain and noise do not punch holes. An opening of ``open_radius`` cuts thin
+    bridges (pale cortical layers have nearly the same gray level as white
+    matter in Nissl) and regions under ``min_region`` px are dropped. With
+    ``connected`` only regions touched by the scribble are returned (a "magic
+    wand"); otherwise every matching region in the image. Background pixels are
+    never returned. Returns (bool mask, low, high).
+    """
+    scribble = np.asarray(scribble, dtype=bool)
+    empty = np.zeros(scribble.shape, bool)
+    smooth = ndimage.gaussian_filter(np.asarray(gray, dtype=np.float32), sigma) if sigma > 0 \
+        else np.asarray(gray, dtype=np.float32)
+    usable = scribble if background is None else scribble & ~background
+    if not usable.any():
+        return empty, 0.0, 0.0
+    samples = smooth[usable]
+    # centre on the dominant gray level (histogram peak), so a scribble that
+    # strays over an edge into another tissue does not widen the range
+    hist, edges = np.histogram(samples, bins=128, range=(0.0, 256.0))
+    hist = ndimage.gaussian_filter1d(hist.astype(np.float32), 1.5)
+    peak = float(edges[int(np.argmax(hist))] + 1.0)
+    core = samples[np.abs(samples - peak) <= 1.5 * max_spread]
+    centre = float(np.median(core)) if core.size else peak
+    robust_sd = 1.4826 * float(np.median(np.abs(core - centre))) if core.size else 0.0
+    half = float(np.clip(spread * robust_sd, min_spread, max_spread))
+    low, high = centre - half, centre + half
+    region = (smooth >= low) & (smooth <= high)
+    if background is not None:
+        region &= ~background
+    if open_radius > 0:
+        region = ndimage.binary_opening(region, structure=_disk(open_radius))
+    region = remove_small_islands(region, min_region)
+    if connected:
+        labels, _count = ndimage.label(region)
+        hit = np.unique(labels[usable & region])
+        hit = hit[hit > 0]
+        region = np.isin(labels, hit) if len(hit) else empty
+    return region, low, high

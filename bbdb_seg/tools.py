@@ -67,7 +67,9 @@ class ToolsMixin:
 
     def update_cursor(self, x: int, y: int, erase: bool) -> None:
         radius = self.brush
-        if self.tool == "select":
+        if self.tool == "pick":
+            radius, colour = 4, "#ff40ff"   # colour picker: small marker, not a brush
+        elif self.tool == "select":
             colour = "#00b7ff"
         else:
             colour = "#ff4040" if erase else "#ffff40"

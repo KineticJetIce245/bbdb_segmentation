@@ -204,6 +204,17 @@ What this means for the threshold tool:
   **erode** / **dilate** it by one pixel. Brush size can be changed with the
   wheel, `[` / `]`, the Brush ± buttons, or by typing a pixel value directly
   into the toolbar box (2–120 px).
+- Press **p** for the **colour picker**: scribble over an area (right-drag to
+  **exclude**, left-drag to **include**) and every region of that gray level
+  under the scribble changes at once, e.g. scribble along the pale white matter
+  of a Nissl section to drop all of it. The gray range is taken from the
+  scribbled pixels (centred on their dominant level, so straying over an edge
+  is fine) on a slightly smoothed image, and thin bridges are cut so the pale
+  cortical layers, which in Nissl have nearly the same gray level as white
+  matter, stay untouched. By default only regions connected to the scribble
+  change; tick **Pick whole image** to change every matching region in the
+  section (riskier for Nissl). An active selection limits the change to it.
+  The status bar shows the gray range used; each pick is one undo step.
 - Press **L** for **brush selection**: left-drag paints a blue region. On
   release it becomes a blue outline, then a normal ROI. Threshold changes then
   apply only inside that brush ROI. Several strokes extend the same brush ROI
@@ -462,8 +473,9 @@ matching section loads instead.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Brush select  Undo  Redo  Clear │ toolbar row 1
-│ Erode/Dilate Brush ± [14] px Accept ☑ Segmented ☐ Stop auto confirm ● done │ toolbar row 2
+│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Brush select  Colour pick  Undo  Redo  Clear │ toolbar row 1
+│ Erode/Dilate Clean Brush ± [14] px Accept ☑ Segmented ☐ Stop auto confirm ● done │ toolbar row 2
+│ Options: ☑ Exclude background ☑ Exclude legend ☑ Smooth ☑ Snap ☑ Keep strokes ☐ Pick whole image │ toolbar row 3
 ├──────────────────────────────────────────────────────────────────────────┤
 │ Threshold min [====]  max [====]  Otsu  ☐ Invert  Otsu: 214  Opacity  Contrast … │ sliders
 │ Contrast …  Auto  Reset  Queue: [all]                                       │ controls
@@ -526,6 +538,7 @@ The status bar shows:
 | `e`            | Toggle the brush between draw and erase        |
 | `f`            | Toggle the paint bucket (fill)                 |
 | `l`            | Toggle brush selection                         |
+| `p`            | Toggle the colour picker                       |
 | `Ctrl+Z` / `u` | Undo the last mask or selection change         |
 | `Ctrl+Y` / `Ctrl+Shift+Z` / `y` | Redo                          |
 | `c`            | Clear the whole mask                           |
