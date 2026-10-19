@@ -30,6 +30,8 @@ from .settings import (
     LEGEND_BAND,
     LEGEND_MARGIN,
     LEGEND_MAX_AREA,
+    SNAP_EDGE_MIN,
+    SNAP_RING,
 )
 
 try:  # exact watershed; optional dependency
@@ -195,3 +197,75 @@ def clean_mask(
     out = snap_to_edges(gray, mask, band=band, background=background)
     out &= ~background
     return remove_small_islands(out, min_island)
+
+
+def snap_stroke(
+    gray: np.ndarray,
+    before: np.ndarray,
+    footprint: np.ndarray,
+    core: np.ndarray,
+    value: bool,
+    excluded: np.ndarray | None = None,
+    ring: int = SNAP_RING,
+    edge_min: float = SNAP_EDGE_MIN,
+) -> np.ndarray:
+    """Edge-aware brush: which pixels of a stroke ``footprint`` take ``value``.
+
+    Marker-controlled watershed in a window around the stroke:
+
+    * "take value" markers: the stroke's centre line (``core``) and every pixel
+      that already has ``value`` (for drawing: the existing mask),
+    * "keep as before" markers: a ``ring`` px band just outside the stroke whose
+      pixels do not have ``value`` yet,
+    * excluded pixels (background / legend) are never cortex.
+
+    The flooding elevation is the image gradient plus a ridge of height
+    ``edge_min`` just outside the stroke's outline, so the stroke stops at an image
+    edge only when that edge is stronger than ``edge_min``; in flat tissue the
+    stroke keeps its painted shape. Returns a bool mask (within ``footprint``).
+    """
+    footprint = np.asarray(footprint, dtype=bool)
+    result = np.zeros(footprint.shape, bool)
+    if not footprint.any():
+        return result
+    rows, cols = np.where(footprint)
+    pad = ring + 4
+    height, width = footprint.shape
+    r0, r1 = max(0, rows.min() - pad), min(height, rows.max() + pad + 1)
+    c0, c1 = max(0, cols.min() - pad), min(width, cols.max() + pad + 1)
+    win = (slice(r0, r1), slice(c0, c1))
+
+    fp = footprint[win]
+    same = (np.asarray(before, dtype=bool)[win]) == bool(value)
+    seed_core = np.asarray(core, dtype=bool)[win] & fp
+    # one px moat just outside the stroke carries the ridge; the marker ring
+    # lies beyond it, so in flat tissue the whole stroke is kept
+    grown = ndimage.binary_dilation(fp, structure=_disk(1))
+    moat = grown & ~fp
+    outer = ndimage.binary_dilation(grown, structure=_disk(1), iterations=max(1, ring)) & ~grown
+
+    take = seed_core | same
+    keep = outer & ~same
+    if excluded is not None:
+        exc = np.asarray(excluded, dtype=bool)[win]
+        if value:
+            take &= ~exc
+            keep |= exc
+        else:
+            take |= exc
+            keep &= ~exc
+    if not (take & fp).any():
+        return result
+
+    markers = np.zeros(fp.shape, dtype=np.int16)
+    markers[keep] = 1
+    markers[take] = 2
+    grad = ndimage.gaussian_gradient_magnitude(np.asarray(gray, dtype=np.float32)[win], sigma=1.0)
+    elevation = grad + edge_min * moat
+    if _sk_watershed is not None:
+        labels = _sk_watershed(elevation, markers)
+    else:
+        peak = float(elevation.max()) or 1.0
+        labels = ndimage.watershed_ift(np.round(elevation / peak * 65535).astype(np.uint16), markers)
+    result[win] = (labels == 2) & fp
+    return result

@@ -31,3 +31,8 @@ ONE_EURO_MIN_CUTOFF = 1.0   # Hz; smoothing strength for slow strokes (lower = s
 ONE_EURO_BETA = 0.05        # speed coefficient; higher = less lag on fast strokes
 ONE_EURO_D_CUTOFF = 1.0     # Hz; cutoff for the speed estimate
 LASSO_SMOOTH_ITERATIONS = 2  # Chaikin corner-cutting passes applied to lasso outlines
+KEEP_BRUSH_STROKES = True  # default for "Keep brush strokes": Clean never removes hand-painted pixels
+SNAP_BRUSH = True        # default for "Snap brush to edges": brush strokes settle on the nearest strong edge
+SNAP_RING = 3            # px ring just outside a stroke used as "not this label" watershed markers
+SNAP_CORE_FRACTION = 1 / 3  # stroke centre line (this fraction of the brush radius) is always kept
+SNAP_EDGE_MIN = 10.0     # gray levels/px; weaker edges than this do not trim a stroke

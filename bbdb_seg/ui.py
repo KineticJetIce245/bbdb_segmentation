@@ -49,6 +49,7 @@ class UiMixin:
         ttk.Button(row, text="Fill (f)", command=lambda: self.set_tool("fill")).pack(side="left", padx=(2, 0))
         ttk.Button(row, text="Brush select (L)", command=lambda: self.set_tool("select")).pack(side="left", padx=(2, 0))
         ttk.Button(row, text="Undo (Ctrl+Z)", command=self.undo).pack(side="left", padx=(2, 0))
+        ttk.Button(row, text="Redo (Ctrl+Y)", command=self.redo).pack(side="left", padx=(2, 0))
         ttk.Button(row, text="Clear mask", command=self.clear_mask).pack(side="left", padx=(2, 10))
 
     def _build_toolbar_brush(self, row: ttk.Frame) -> None:
@@ -65,6 +66,12 @@ class UiMixin:
         ).pack(side="left", padx=(2, 2))
         ttk.Checkbutton(
             row, text="Smooth strokes", variable=self.smooth_var, takefocus=False,
+        ).pack(side="left", padx=(2, 2))
+        ttk.Checkbutton(
+            row, text="Snap brush to edges", variable=self.snap_brush_var, takefocus=False,
+        ).pack(side="left", padx=(2, 2))
+        ttk.Checkbutton(
+            row, text="Keep brush strokes", variable=self.keep_strokes_var, takefocus=False,
         ).pack(side="left", padx=(2, 14))
 
         ttk.Button(row, text="Brush -", command=lambda: self.change_brush(-2)).pack(side="left")
@@ -198,7 +205,7 @@ class UiMixin:
         help_text = (
             "Enter: accept & next    Left/Right: section    t: Otsu    i: invert    "
             "r: rotate 90    h/v: flip    Left-drag: draw    Right-drag: erase    e: draw/erase\n"
-            "f: fill    L: brush selection    Right-drag in Brush select: erase selection    Ctrl+Z/u: undo    c: clear    E/D: erode/dilate    k: clean (keeps your brush strokes)    [ ]: brush    brush box: type px    s: save    "
+            "f: fill    L: brush selection    Right-drag in Brush select: erase selection    Ctrl+Z/u: undo    Ctrl+Y/y: redo    c: clear    E/D: erode/dilate    k: clean whole mask    [ ]: brush    brush box: type px    s: save    "
             "Wheel: zoom    Shift+Wheel: brush    +/-: zoom    0: fit    Middle/Ctrl-drag: pan    Esc/q: quit\n"
             "Shift+left-drag: rectangle ROI    Shift+right-drag: lasso ROI    Shift-click: activate/clear ROI    Backspace/Delete: delete ROI\n"
             "(moving the threshold sliders replaces hand edits)"

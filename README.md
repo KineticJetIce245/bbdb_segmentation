@@ -212,7 +212,10 @@ What this means for the threshold tool:
 - A **paint bucket** fills a connected region of the mask in one click, for
   example a hole inside the tissue. Right-click with the bucket empties a
   region instead.
-- **Undo** (Ctrl+Z) reverts the last mask change, up to 30 steps per section.
+- **Undo** (Ctrl+Z or `u`) and **Redo** (Ctrl+Y, Ctrl+Shift+Z or `y`) cover
+  mask changes *and* selection changes (creating, extending, brush-erasing or
+  deleting a rectangle, lasso or brush selection), up to 30 steps per section.
+  A new edit after an undo clears the redo history.
 - You can **rotate** the view in 90° steps and **flip** it horizontally or
   vertically. The choice is recorded in the CSV. The saved mask always stays
   aligned with the original image.
@@ -227,10 +230,12 @@ What this means for the threshold tool:
 - **Clean (k)** tidies the mask in one undoable step. It removes background
   pixels, snaps the boundary onto the strongest nearby image edge (a 3-px band,
   marker-controlled watershed: the outline can move up to that edge but never
-  across it) and drops islands under 30 px. With an ROI active, only the ROI
-  changes. **Your hand edits win:** pixels you painted with the brush or fill
-  bucket are never removed by Clean (unless they are background or legend),
-  and pixels you erased by hand are never added back. Check the result, then
+  across it) and drops islands under 30 px. Clean always works on the whole
+  mask, whether or not a selection is active. **Your hand edits win:** while
+  **Keep brush strokes** is ticked (default), pixels you painted with the brush
+  or fill bucket are never removed by Clean (unless they are background or
+  legend); untick it to let Clean tidy roughly painted areas too. Pixels you
+  erased by hand are never added back. Check the result, then
   Ctrl+Z if you don't like it. Install `scikit-image` for exact edge placement
   (otherwise a scipy fallback is used).
 - **Exclude legend** (on by default): slide labels ("63-310", "#1650"), the
@@ -242,6 +247,16 @@ What this means for the threshold tool:
   barely filters fast ones, so the line does not trail the pointer; it
   finishes exactly where you release. Lasso outlines are rounded before
   becoming an ROI.
+- **Snap brush to edges** (on by default): when you release a brush stroke,
+  it is snapped to the image with a local marker-controlled watershed. The
+  stroke's centre line and the existing mask count as "cortex", a 3-px ring
+  just outside the stroke counts as "not cortex", and the boundary settles on
+  the strongest edge in between. Strokes therefore stop at a clear tissue edge
+  instead of spilling over it, while in uniform tissue the whole stroke is
+  kept (edges weaker than 10 gray levels/px are ignored). Erasing works the
+  same way: the eraser stops at a strong edge and leaves the cortex beyond it.
+  Background and legend are never painted. The live preview shows the raw
+  stroke; the snapped result appears on release.
 - While you drag, the stroke is previewed as a solid line drawn straight on
   the canvas (red = draw, blue = erase), so painting stays responsive at any
   zoom; the translucent mask overlay updates when you release.
@@ -263,7 +278,8 @@ bbdb_seg/                       # Python package (implementation)
   session.py                    # image/mask loading, saving and queue I/O
   status.py                     # manual segmented status and stop autolog
   clean.py                      # background detection, edge snapping, island removal (pure)
-  cleaning.py                   # Exclude background/legend, Clean (k) GUI glue, hand-edit memory
+  cleaning.py                   # Exclude background/legend, Clean (k), edge-aware brush glue, hand-edit memory
+  history.py                    # undo/redo for mask and selection edits
   smoothing.py                  # brush stabiliser and lasso (Chaikin) smoothing
   work_queue.py                 # CSV selection and work-queue refresh
   threshold.py                  # threshold range, Invert, slider coalescing
@@ -446,7 +462,7 @@ matching section loads instead.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Brush select  Undo  Clear │ toolbar row 1
+│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Brush select  Undo  Redo  Clear │ toolbar row 1
 │ Erode/Dilate Brush ± [14] px Accept ☑ Segmented ☐ Stop auto confirm ● done │ toolbar row 2
 ├──────────────────────────────────────────────────────────────────────────┤
 │ Threshold min [====]  max [====]  Otsu  ☐ Invert  Otsu: 214  Opacity  Contrast … │ sliders
@@ -508,10 +524,11 @@ The status bar shows:
 | `e`            | Toggle the brush between draw and erase        |
 | `f`            | Toggle the paint bucket (fill)                 |
 | `l`            | Toggle brush selection                         |
-| `Ctrl+Z` / `u` | Undo the last mask change                      |
+| `Ctrl+Z` / `u` | Undo the last mask or selection change         |
+| `Ctrl+Y` / `Ctrl+Shift+Z` / `y` | Redo                          |
 | `c`            | Clear the whole mask                           |
 | `E` / `D`      | Erode / dilate the mask by one pixel           |
-| `k`            | Clean: drop background/legend, snap edges, remove specks (keeps your brush strokes) |
+| `k`            | Clean the whole mask: drop background/legend, snap edges, remove specks |
 | `[` / `]`      | Smaller / larger brush                         |
 | `+` / `=` / `-` | Zoom in / out at the mouse pointer            |
 | `0`            | Fit the image to the window                    |

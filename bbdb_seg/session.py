@@ -97,6 +97,7 @@ class IOMixin:
         self.last_pt = None
         self.mask_dirty = False
         self.undo_stack.clear()
+        self.redo_stack.clear()
         self.last_action = None
         self.disp_index = None
         self.zoom = 1.0

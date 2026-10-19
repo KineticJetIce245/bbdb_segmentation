@@ -78,6 +78,7 @@ class BrushSelectMixin:
             None,
         )
         if target is not None and target.shape == "brush":
+            self.push_roi_undo()
             target.mask = mask
             target.points = points
             target.r0, target.c0 = int(rows.min()), int(cols.min())
