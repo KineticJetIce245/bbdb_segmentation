@@ -44,6 +44,8 @@ from .session import IOMixin
 from .status import StatusMixin
 from .brush_erase import BrushEraseMixin
 from .cleaning import CleanMixin
+from .history import HistoryMixin
+from .picker import PickMixin
 from .smoothing import StrokeSmoothMixin
 from .brush_select import BrushSelectMixin
 from .lasso import LassoMixin
@@ -56,7 +58,9 @@ from .tools import ToolsMixin
 from .ui import UiMixin
 from .paths import REPO_ROOT
 from .settings import (
+    KEEP_BRUSH_STROKES,
     SMOOTH_STROKES,
+    SNAP_BRUSH,
     APP_TITLE,
     DEFAULT_BRUSH,
     OVERLAY_ALPHA,
@@ -64,7 +68,7 @@ from .settings import (
 )
 
 
-class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, LassoMixin, CleanMixin, StrokeSmoothMixin, PaintMixin, BrushSelectMixin, BrushEraseMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
+class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, LassoMixin, CleanMixin, StrokeSmoothMixin, HistoryMixin, PickMixin, PaintMixin, BrushSelectMixin, BrushEraseMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
     def __init__(
         self,
         csv_path: Path | None,
@@ -86,6 +90,9 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         self._init_document_state()
         self._init_edit_state()
         self._init_clean_state()
+        self._init_pick_state()
+        self.block_mask = None
+        self.block_layers = {}
         self.reset_smoothing()
         self._init_brush_select_state()
         self._init_view_state()
@@ -105,7 +112,8 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         self.flip = ""
         self.rotation = 0
         self.tool = "draw"
-        self.undo_stack: list[Image.Image] = []
+        self.undo_stack: list[tuple] = []   # ("mask", image) or ("rois", ...) entries
+        self.redo_stack: list[tuple] = []
         self.last_action: str | None = None
         self.stroke_pushed = False
         self.brush = DEFAULT_BRUSH
@@ -197,6 +205,8 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         self.exclude_bg_var = tk.BooleanVar(value=True)
         self.exclude_legend_var = tk.BooleanVar(value=True)
         self.smooth_var = tk.BooleanVar(value=SMOOTH_STROKES)
+        self.keep_strokes_var = tk.BooleanVar(value=KEEP_BRUSH_STROKES)
+        self.snap_brush_var = tk.BooleanVar(value=SNAP_BRUSH)
         self.segmented_var = tk.BooleanVar(value=False)
         self.stop_auto_confirm_var = tk.BooleanVar(value=False)
         self.queue_filter_var = tk.StringVar(value="all")
@@ -209,6 +219,8 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         self.ui_ready = True
         self.bind_all("<Key>", self.on_key)
         self.bind_all("<Control-z>", lambda _e: self.undo())
+        self.bind_all("<Control-y>", lambda _e: self.redo())
+        self.bind_all("<Control-Shift-Z>", lambda _e: self.redo())
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.load_current()
         self.after(100, self.focus_force)
@@ -256,6 +268,10 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
             self.toggle_brush_select()
         elif char == "u":
             self.undo()
+        elif char == "y":
+            self.redo()
+        elif char == "p":
+            self.toggle_pick()
         elif char == "s":
             self.save_now()
         elif char == "[":

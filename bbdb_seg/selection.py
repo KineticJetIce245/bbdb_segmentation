@@ -194,6 +194,7 @@ class RoiMixin:
         self.create_roi(row0, col0, row1 + 1, col1 + 1)
 
     def _register_roi(self, roi: Roi, render: bool = True) -> None:
+        self.push_roi_undo()
         self.next_roi_id += 1
         self.rois.append(roi)
         self.active_roi_id = roi.roi_id
@@ -254,6 +255,7 @@ class RoiMixin:
         roi = self.active_roi()
         if roi is None:
             return
+        self.push_roi_undo()
         self.rois.remove(roi)
         self.active_roi_id = None
         self._load_threshold_scope()

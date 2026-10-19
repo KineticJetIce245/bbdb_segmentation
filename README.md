@@ -204,6 +204,23 @@ What this means for the threshold tool:
   **erode** / **dilate** it by one pixel. Brush size can be changed with the
   wheel, `[` / `]`, the Brush ± buttons, or by typing a pixel value directly
   into the toolbar box (2–120 px).
+- Press **p** for the **colour picker**: scribble over an area (right-drag to
+  **exclude**, left-drag to **include**) and every continuous block of that
+  gray level touched by the scribble changes at once, as one solid piece (holes
+  up to 400 px inside a block, such as vessels or dark streaks, go with it), e.g.
+  scribble along the pale white matter of a Nissl section to drop all of it. The gray range is taken from the
+  scribbled pixels (centred on their dominant level, so straying over an edge
+  is fine) on a slightly smoothed image, and thin bridges are cut so the pale
+  cortical layers, which in Nissl have nearly the same gray level as white
+  matter, stay untouched. An active selection limits the change to it.
+  **Rejected blocks turn transparent dark blue** and stay blue: blue pixels are
+  never cortex, so the threshold sliders, the brush, the fill bucket, Clean and
+  include-picks all leave them out, just like background. A handy workflow:
+  right-drag the white matter blue, then lasso the section and move the
+  threshold sliders; only non-blue tissue turns red. Ctrl+Z undoes a pick
+  (blue included); **Clear blue** removes the whole blue layer. The blue layer
+  is kept per section while the GUI is open; it is not saved to disk.
+  The status bar shows the gray range used; each pick is one undo step.
 - Press **L** for **brush selection**: left-drag paints a blue region. On
   release it becomes a blue outline, then a normal ROI. Threshold changes then
   apply only inside that brush ROI. Several strokes extend the same brush ROI
@@ -212,7 +229,10 @@ What this means for the threshold tool:
 - A **paint bucket** fills a connected region of the mask in one click, for
   example a hole inside the tissue. Right-click with the bucket empties a
   region instead.
-- **Undo** (Ctrl+Z) reverts the last mask change, up to 30 steps per section.
+- **Undo** (Ctrl+Z or `u`) and **Redo** (Ctrl+Y, Ctrl+Shift+Z or `y`) cover
+  mask changes *and* selection changes (creating, extending, brush-erasing or
+  deleting a rectangle, lasso or brush selection), up to 30 steps per section.
+  A new edit after an undo clears the redo history.
 - You can **rotate** the view in 90° steps and **flip** it horizontally or
   vertically. The choice is recorded in the CSV. The saved mask always stays
   aligned with the original image.
@@ -223,14 +243,18 @@ What this means for the threshold tool:
   estimated from the image border, and background pixels (plus a 1-px margin
   for the blurry tissue rim) are never selected, whether by the threshold
   sliders, brush strokes or the fill bucket. White, grey or dark backgrounds
-  all work.
+  all work. Colour is used too: a pixel only counts as background if it also
+  has the slide's colour, so the faint cream edge of myelin-stained cortex
+  (almost as bright as a white slide, but tinted) stays selectable.
 - **Clean (k)** tidies the mask in one undoable step. It removes background
   pixels, snaps the boundary onto the strongest nearby image edge (a 3-px band,
   marker-controlled watershed: the outline can move up to that edge but never
-  across it) and drops islands under 30 px. With an ROI active, only the ROI
-  changes. **Your hand edits win:** pixels you painted with the brush or fill
-  bucket are never removed by Clean (unless they are background or legend),
-  and pixels you erased by hand are never added back. Check the result, then
+  across it) and drops islands under 30 px. Clean always works on the whole
+  mask, whether or not a selection is active. **Your hand edits win:** while
+  **Keep brush strokes** is ticked (default), pixels you painted with the brush
+  or fill bucket are never removed by Clean (unless they are background or
+  legend); untick it to let Clean tidy roughly painted areas too. Pixels you
+  erased by hand are never added back. Check the result, then
   Ctrl+Z if you don't like it. Install `scikit-image` for exact edge placement
   (otherwise a scipy fallback is used).
 - **Exclude legend** (on by default): slide labels ("63-310", "#1650"), the
@@ -242,9 +266,19 @@ What this means for the threshold tool:
   barely filters fast ones, so the line does not trail the pointer; it
   finishes exactly where you release. Lasso outlines are rounded before
   becoming an ROI.
-- While you drag, the stroke is previewed as a solid line drawn straight on
-  the canvas (red = draw, blue = erase), so painting stays responsive at any
-  zoom; the translucent mask overlay updates when you release.
+- **Snap brush to edges** (on by default): when you release a brush stroke,
+  it is snapped to the image with a local marker-controlled watershed. The
+  stroke's centre line and the existing mask count as "cortex", a 3-px ring
+  just outside the stroke counts as "not cortex", and the boundary settles on
+  the strongest edge in between. Strokes therefore stop at a clear tissue edge
+  instead of spilling over it, while in uniform tissue the whole stroke is
+  kept (edges weaker than 10 gray levels/px are ignored). Erasing works the
+  same way: the eraser stops at a strong edge and leaves the cortex beyond it.
+  Background and legend are never painted. While you drag you see the raw
+  stroke; the snapped result appears on release.
+- While you drag, the mask overlay itself updates under the brush (painting
+  adds red, erasing removes it). Only the small area around the newest stroke
+  segment is redrawn, so painting stays responsive at any zoom.
 - **Overlay opacity** and **contrast** sliders change only what you see on
   screen.
 - Every mask-changing operation and every ROI action is appended to
@@ -263,7 +297,8 @@ bbdb_seg/                       # Python package (implementation)
   session.py                    # image/mask loading, saving and queue I/O
   status.py                     # manual segmented status and stop autolog
   clean.py                      # background detection, edge snapping, island removal (pure)
-  cleaning.py                   # Exclude background/legend, Clean (k) GUI glue, hand-edit memory
+  cleaning.py                   # Exclude background/legend, Clean (k), edge-aware brush glue, hand-edit memory
+  history.py                    # undo/redo for mask and selection edits
   smoothing.py                  # brush stabiliser and lasso (Chaikin) smoothing
   work_queue.py                 # CSV selection and work-queue refresh
   threshold.py                  # threshold range, Invert, slider coalescing
@@ -446,8 +481,9 @@ matching section loads instead.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Brush select  Undo  Clear │ toolbar row 1
-│ Erode/Dilate Brush ± [14] px Accept ☑ Segmented ☐ Stop auto confirm ● done │ toolbar row 2
+│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Brush select  Colour pick  Clear blue  Undo  Redo  Clear │ toolbar row 1
+│ Erode/Dilate Clean Brush ± [14] px Accept ☑ Segmented ☐ Stop auto confirm ● done │ toolbar row 2
+│ Options: ☑ Exclude background ☑ Exclude legend ☑ Smooth ☑ Snap ☑ Keep strokes │ toolbar row 3
 ├──────────────────────────────────────────────────────────────────────────┤
 │ Threshold min [====]  max [====]  Otsu  ☐ Invert  Otsu: 214  Opacity  Contrast … │ sliders
 │ Contrast …  Auto  Reset  Queue: [all]                                       │ controls
@@ -487,7 +523,9 @@ The status bar shows:
 - **Otsu (t)** resets the active scope (ROI if one is active, otherwise the
   whole image) to the initial band and turns **Invert** off.
 - Moving a slider or toggling Invert **replaces mask pixels inside the active
-  scope**; brush edits elsewhere are preserved. **Undo** still works.
+  scope**; brush edits elsewhere are preserved. **Undo** reverts the mask
+  *and* moves the sliders (and Invert) back to where they were; each slider
+  drag, from press to release, is its own undo step.
 - Slider updates are coalesced (about every 30 ms) so dragging stays
   responsive. The latest value is always applied before you paint, save, or
   change section.
@@ -508,10 +546,12 @@ The status bar shows:
 | `e`            | Toggle the brush between draw and erase        |
 | `f`            | Toggle the paint bucket (fill)                 |
 | `l`            | Toggle brush selection                         |
-| `Ctrl+Z` / `u` | Undo the last mask change                      |
+| `p`            | Toggle the colour picker                       |
+| `Ctrl+Z` / `u` | Undo the last mask or selection change         |
+| `Ctrl+Y` / `Ctrl+Shift+Z` / `y` | Redo                          |
 | `c`            | Clear the whole mask                           |
 | `E` / `D`      | Erode / dilate the mask by one pixel           |
-| `k`            | Clean: drop background/legend, snap edges, remove specks (keeps your brush strokes) |
+| `k`            | Clean the whole mask: drop background/legend, snap edges, remove specks |
 | `[` / `]`      | Smaller / larger brush                         |
 | `+` / `=` / `-` | Zoom in / out at the mouse pointer            |
 | `0`            | Fit the image to the window                    |

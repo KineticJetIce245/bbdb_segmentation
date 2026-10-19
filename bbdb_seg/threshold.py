@@ -60,6 +60,7 @@ class ThresholdMixin:
             self.render_overlay()
         if do_contrast:
             self.render_background()
+            self.render_overlay()   # the overlay is drawn opaque over the background
 
     def threshold_mask(self) -> Image.Image:
         assert self.base_img is not None
@@ -145,6 +146,7 @@ class ThresholdMixin:
                 bbox=bbox,
             )
         self._sync_threshold_scope()
+        self.commit_threshold_state()
         self.mask_source = "threshold"
         self.mark_edited()
 

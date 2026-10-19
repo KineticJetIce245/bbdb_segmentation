@@ -9,7 +9,7 @@ from PIL import Image, ImageTk
 
 from .transforms import apply_transform
 from .image_ops import BILINEAR, NEAREST, apply_contrast as contrast_array
-from .settings import MIN_ZOOM
+from .settings import BLOCK_ALPHA_GAIN, BLOCK_COLOUR, MIN_ZOOM
 from .view_math import (
     clamp_pan as clamp_pan_value,
     fit_scale,
@@ -78,6 +78,10 @@ class RenderMixin:
         self.bg_photo = ImageTk.PhotoImage(visible)
         place_x = offset_x + left
         place_y = offset_y + top
+        # kept so the overlay can be blended onto it and shown as one opaque
+        # image (Tk is slow at drawing semi-transparent images over others)
+        self.bg_visible = visible
+        self.bg_place = (place_x, place_y)
         if self.bg_id is None:
             self.bg_id = self.canvas.create_image(
                 place_x, place_y, anchor="nw", image=self.bg_photo
@@ -106,24 +110,50 @@ class RenderMixin:
                 self.canvas.itemconfigure(self.ov_id, state="hidden")
             return
 
+        matrix = (1.0 / self.display_scale, 0.0, left / self.display_scale,
+                  0.0, 1.0 / self.display_scale, top / self.display_scale)
         source = Image.fromarray(disp_mask, "L")
         stencil = source.transform(
-            (right - left, bottom - top),
-            Image.Transform.AFFINE,
-            (1.0 / self.display_scale, 0.0, left / self.display_scale,
-             0.0, 1.0 / self.display_scale, top / self.display_scale),
-            resample=NEAREST,
+            (right - left, bottom - top), Image.Transform.AFFINE, matrix, resample=NEAREST,
         )
-        self._set_overlay_photo(stencil, offset_x + left, offset_y + top)
+        block_stencil = None
+        disp_block = self._display_block() if hasattr(self, "_display_block") else None
+        if disp_block is not None:
+            block_stencil = Image.fromarray(disp_block, "L").transform(
+                (right - left, bottom - top), Image.Transform.AFFINE, matrix, resample=NEAREST,
+            )
+        self._set_overlay_photo(stencil, offset_x + left, offset_y + top, block_stencil)
 
-    def _set_overlay_photo(self, stencil: Image.Image, x: float, y: float) -> None:
+    def _set_overlay_photo(self, stencil: Image.Image, x: float, y: float,
+                           block_stencil: Image.Image | None = None) -> None:
+        background = getattr(self, "bg_visible", None)
+        if (background is not None and background.size == stencil.size
+                and getattr(self, "bg_place", None) == (x, y)):
+            # Fast path: blend red/blue onto the cached background and show one
+            # opaque RGB image on top of it.
+            out = background.copy()
+            if block_stencil is not None:
+                alpha = min(255, int(self.overlay_alpha * BLOCK_ALPHA_GAIN))
+                out.paste(BLOCK_COLOUR, (0, 0), block_stencil.point(lambda v, a=alpha: a if v else 0))
+            red_alpha = int(self.overlay_alpha)
+            out.paste((255, 40, 40), (0, 0), stencil.point(lambda v, a=red_alpha: a if v else 0))
+            self._place_overlay_image(out, x, y)
+            return
         rgba = Image.new("RGBA", stencil.size, (0, 0, 0, 0))
+        if block_stencil is not None:   # rejected regions (colour picker), under the mask
+            alpha = min(255, int(self.overlay_alpha * BLOCK_ALPHA_GAIN))
+            rgba.paste(Image.new("RGBA", stencil.size, (*BLOCK_COLOUR, alpha)),
+                       (0, 0), block_stencil)
         rgba.paste(
             Image.new("RGBA", stencil.size, (255, 40, 40, self.overlay_alpha)),
             (0, 0),
             stencil,
         )
-        self.ov_photo = ImageTk.PhotoImage(rgba)
+        self._place_overlay_image(rgba, x, y)
+
+    def _place_overlay_image(self, image: Image.Image, x: float, y: float) -> None:
+        self.ov_image = image
+        self.ov_photo = ImageTk.PhotoImage(image)
         if self.ov_id is None:
             self.ov_id = self.canvas.create_image(
                 x, y, anchor="nw", image=self.ov_photo

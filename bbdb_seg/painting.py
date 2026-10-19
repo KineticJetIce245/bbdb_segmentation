@@ -10,7 +10,7 @@ from scipy import ndimage
 
 from .transforms import decode_flip, encode_flip, normalize_rotation
 from .image_ops import mask_diff as diff_masks
-from .settings import CONTROL_MASK, SHIFT_MASK, UNDO_LIMIT
+from .settings import CONTROL_MASK, SHIFT_MASK, SNAP_CORE_FRACTION, UNDO_LIMIT
 
 class PaintMixin:
 
@@ -21,12 +21,17 @@ class PaintMixin:
         targets = [(self.base_mask_img, value)]
         footprint = getattr(self, "stroke_footprint", None)
         if footprint is not None:
-            targets.append((footprint, 255))   # everything the brush touched
-        for image, fill in targets:
+            targets.append((footprint, 255, radius))   # everything the brush touched
+        core = getattr(self, "stroke_core", None)
+        if core is not None:                           # stroke centre line (edge snapping)
+            targets.append((core, 255, max(1, int(round(radius * SNAP_CORE_FRACTION)))))
+        for target in targets:
+            image, fill = target[0], target[1]
+            rad = target[2] if len(target) > 2 else radius
             draw = ImageDraw.Draw(image)
-            draw.line([(c0, r0), (c1, r1)], fill=fill, width=2 * radius)
+            draw.line([(c0, r0), (c1, r1)], fill=fill, width=2 * rad)
             for row, col in ((r0, c0), (r1, c1)):
-                draw.ellipse([col - radius, row - radius, col + radius, row + radius], fill=fill)
+                draw.ellipse([col - rad, row - rad, col + rad, row + rad], fill=fill)
 
     def on_press(self, event: tk.Event, right: bool) -> None:
         self.flush_slider_updates()
@@ -49,16 +54,23 @@ class PaintMixin:
             else:
                 self.start_brush_select(event)
             return
+        if self.tool == "pick":
+            self.start_pick(event, right)
+            return
         self.last_pt = None
         self.reset_smoothing()
         self.stroke_pushed = False
         self.stroke_before = np.asarray(self.base_mask_img).copy()
         self.stroke_footprint = Image.new("L", self.base_mask_img.size, 0)
+        self.stroke_core = Image.new("L", self.base_mask_img.size, 0)
         self.stroke_op = "erase" if (right or self.tool == "erase") else "draw"
         self.stroke_roi_id = self.active_roi_id
         self.continue_stroke(event, right or self.tool == "erase")
 
     def on_drag(self, event: tk.Event, right: bool) -> None:
+        if getattr(self, "pick_dragging", False):
+            self.drag_pick(event)
+            return
         if self.brush_erase_dragging:
             self.drag_brush_erase(event)
             return
@@ -83,7 +95,7 @@ class PaintMixin:
         if event.state & CONTROL_MASK:
             self.start_pan(event)
             return
-        if self.tool != "fill":
+        if self.tool not in ("fill", "pick"):
             self.continue_stroke(event, right or self.tool == "erase")
 
     def continue_stroke(self, event: tk.Event, erase: bool) -> None:
@@ -111,6 +123,9 @@ class PaintMixin:
         self.draw_stroke_preview(sx, sy, erase)
 
     def end_stroke(self, _event: tk.Event | None = None) -> None:
+        if getattr(self, "pick_dragging", False):
+            self.end_pick(_event)
+            return
         if self.brush_erase_dragging:
             if _event is not None:
                 self.end_brush_erase(_event)
@@ -143,18 +158,23 @@ class PaintMixin:
         before = self.stroke_before
         self.stroke_before = None
         if before is not None:
-            if self.stroke_op == "draw":
+            footprint = getattr(self, "stroke_footprint", None)
+            footprint = np.asarray(footprint) > 0 if footprint is not None else None
+            core = getattr(self, "stroke_core", None)
+            snapped = self.snap_stroke_to_edges(
+                before, footprint, np.asarray(core) > 0 if core is not None else None,
+                self.stroke_op,
+            )
+            if snapped is not None:   # edge-aware brush (marker-controlled watershed)
+                self.base_mask_img, footprint = Image.fromarray(snapped[0]), snapped[1]
+            elif self.stroke_op == "draw":
                 painted = np.asarray(self.base_mask_img)
                 kept = self.exclude_background(painted, strict=True)
                 if not np.array_equal(kept, painted):
                     self.base_mask_img = Image.fromarray(kept)
             self.render_overlay()   # one raster render per stroke
             after = np.asarray(self.base_mask_img)
-            footprint = getattr(self, "stroke_footprint", None)
-            self.record_hand_edit(
-                before, after, self.stroke_op,
-                footprint=np.asarray(footprint) > 0 if footprint is not None else None,
-            )
+            self.record_hand_edit(before, after, self.stroke_op, footprint=footprint)
             added, removed, bbox = diff_masks(before, after)
             if bbox is not None:
                 roi = next(
@@ -169,6 +189,7 @@ class PaintMixin:
                     bbox=bbox,
                 )
         self.stroke_footprint = None
+        self.stroke_core = None
         self.stroke_roi_id = None
         if self.mask_dirty:
             self.mask_source = "edited"

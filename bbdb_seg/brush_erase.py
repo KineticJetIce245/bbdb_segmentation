@@ -11,6 +11,7 @@ class BrushEraseMixin:
         roi = self.active_roi()
         if roi is None or roi.shape != "brush" or roi.mask is None:
             return
+        self.push_roi_undo()
         self.brush_select_dragging = False
         self._clear_brush_fill()
         self.cancel_brush_preview()

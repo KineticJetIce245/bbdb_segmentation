@@ -23,6 +23,7 @@ import numpy as np
 from scipy import ndimage
 
 from .settings import (
+    BG_CHROMA_TOLERANCE,
     BG_MARGIN,
     BG_TOLERANCE,
     CLEAN_BAND,
@@ -30,6 +31,15 @@ from .settings import (
     LEGEND_BAND,
     LEGEND_MARGIN,
     LEGEND_MAX_AREA,
+    PICK_MIN_REGION,
+    PICK_MAX_HOLE,
+    PICK_MAX_SPREAD,
+    PICK_MIN_SPREAD,
+    PICK_OPEN,
+    PICK_SIGMA,
+    PICK_SPREAD,
+    SNAP_EDGE_MIN,
+    SNAP_RING,
 )
 
 try:  # exact watershed; optional dependency
@@ -43,10 +53,16 @@ def _disk(radius: int) -> np.ndarray:
     return (xx * xx + yy * yy) <= radius * radius
 
 
+def _border(values: np.ndarray) -> np.ndarray:
+    return np.concatenate([values[0], values[-1], values[:, 0], values[:, -1]]).astype(np.float32)
+
+
 def background_mask(
     gray: np.ndarray,
     tolerance: int | None = BG_TOLERANCE,
     margin: int = BG_MARGIN,
+    rgb: np.ndarray | None = None,
+    chroma_tolerance: float = BG_CHROMA_TOLERANCE,
 ) -> np.ndarray:
     """Bool mask of pixels within ``tolerance`` of the border (background) level.
 
@@ -54,13 +70,28 @@ def background_mask(
     dark backgrounds all work. ``tolerance`` widens automatically when the
     border is noisy. ``margin`` grows the result by that many pixels to absorb
     the blurry tissue rim.
+
+    With ``rgb`` (same height/width), a pixel must also have the background's
+    colour: the faint cream edge of myelin-stained cortex or a pale purple Nissl
+    rim is nearly as bright as a white slide, but tinted, so it counts as
+    tissue. Colour is measured on two opponent channels (blue vs red+green, red
+    vs green), lightly smoothed against JPEG noise.
     """
     gray = np.asarray(gray)
-    border = np.concatenate([gray[0], gray[-1], gray[:, 0], gray[:, -1]]).astype(np.float32)
+    border = _border(gray)
     level = float(np.median(border))
     spread = float(np.median(np.abs(border - level)))  # robust border noise
     tol = max(float(tolerance or 0), 3.0 * spread)
     bg = np.abs(gray.astype(np.float32) - level) <= tol
+    if rgb is not None and np.asarray(rgb).shape[:2] == gray.shape and np.asarray(rgb).ndim == 3:
+        colour = np.asarray(rgb, dtype=np.float32)
+        for channel in (colour[..., 2] - 0.5 * (colour[..., 0] + colour[..., 1]),
+                        colour[..., 0] - colour[..., 1]):
+            channel = ndimage.gaussian_filter(channel, 1.0)
+            edge = _border(channel)
+            centre = float(np.median(edge))
+            ctol = max(float(chroma_tolerance), 3.0 * float(np.median(np.abs(edge - centre))))
+            bg &= np.abs(channel - centre) <= ctol
     if margin > 0:
         bg = ndimage.binary_dilation(bg, structure=_disk(1), iterations=margin)
     return bg
@@ -195,3 +226,176 @@ def clean_mask(
     out = snap_to_edges(gray, mask, band=band, background=background)
     out &= ~background
     return remove_small_islands(out, min_island)
+
+
+def snap_stroke(
+    gray: np.ndarray,
+    before: np.ndarray,
+    footprint: np.ndarray,
+    core: np.ndarray,
+    value: bool,
+    excluded: np.ndarray | None = None,
+    ring: int = SNAP_RING,
+    edge_min: float = SNAP_EDGE_MIN,
+) -> np.ndarray:
+    """Edge-aware brush: which pixels of a stroke ``footprint`` take ``value``.
+
+    Marker-controlled watershed in a window around the stroke:
+
+    * "take value" markers: the stroke's centre line (``core``) and every pixel
+      that already has ``value`` (for drawing: the existing mask),
+    * "keep as before" markers: a ``ring`` px band just outside the stroke whose
+      pixels do not have ``value`` yet,
+    * excluded pixels (background / legend) are never cortex.
+
+    The flooding elevation is the image gradient plus a ridge of height
+    ``edge_min`` just outside the stroke's outline, so the stroke stops at an image
+    edge only when that edge is stronger than ``edge_min``; in flat tissue the
+    stroke keeps its painted shape. Returns a bool mask (within ``footprint``).
+    """
+    footprint = np.asarray(footprint, dtype=bool)
+    result = np.zeros(footprint.shape, bool)
+    if not footprint.any():
+        return result
+    rows, cols = np.where(footprint)
+    pad = ring + 4
+    height, width = footprint.shape
+    r0, r1 = max(0, rows.min() - pad), min(height, rows.max() + pad + 1)
+    c0, c1 = max(0, cols.min() - pad), min(width, cols.max() + pad + 1)
+    win = (slice(r0, r1), slice(c0, c1))
+
+    fp = footprint[win]
+    same = (np.asarray(before, dtype=bool)[win]) == bool(value)
+    seed_core = np.asarray(core, dtype=bool)[win] & fp
+    # one px moat just outside the stroke carries the ridge; the marker ring
+    # lies beyond it, so in flat tissue the whole stroke is kept
+    grown = ndimage.binary_dilation(fp, structure=_disk(1))
+    moat = grown & ~fp
+    outer = ndimage.binary_dilation(grown, structure=_disk(1), iterations=max(1, ring)) & ~grown
+
+    take = seed_core | same
+    keep = outer & ~same
+    if excluded is not None:
+        exc = np.asarray(excluded, dtype=bool)[win]
+        if value:
+            take &= ~exc
+            keep |= exc
+        else:
+            take |= exc
+            keep &= ~exc
+    if not (take & fp).any():
+        return result
+
+    markers = np.zeros(fp.shape, dtype=np.int16)
+    markers[keep] = 1
+    markers[take] = 2
+    grad = ndimage.gaussian_gradient_magnitude(np.asarray(gray, dtype=np.float32)[win], sigma=1.0)
+    elevation = grad + edge_min * moat
+    if _sk_watershed is not None:
+        labels = _sk_watershed(elevation, markers)
+    else:
+        peak = float(elevation.max()) or 1.0
+        labels = ndimage.watershed_ift(np.round(elevation / peak * 65535).astype(np.uint16), markers)
+    result[win] = (labels == 2) & fp
+    return result
+
+
+def colour_region(
+    gray: np.ndarray,
+    scribble: np.ndarray,
+    *,
+    background: np.ndarray | None = None,
+    connected: bool = True,
+    spread: float = PICK_SPREAD,
+    min_spread: float = PICK_MIN_SPREAD,
+    max_spread: float = PICK_MAX_SPREAD,
+    sigma: float = PICK_SIGMA,
+    open_radius: int = PICK_OPEN,
+    min_region: int = PICK_MIN_REGION,
+    max_hole: int = PICK_MAX_HOLE,
+    smoothed: np.ndarray | None = None,
+) -> tuple[np.ndarray, float, float]:
+    """Colour picker: pixels with the same gray level as the scribbled ones.
+
+    The gray range is centred on the scribbled pixels' dominant gray level
+    (histogram peak, so a scribble straying over an edge does not matter), with
+    a half-width of ``spread`` robust SDs clipped to [``min_spread``,
+    ``max_spread``], measured on an image smoothed with ``sigma`` so grain and
+    noise do not punch holes. An opening of ``open_radius`` cuts thin bridges
+    (pale cortical layers have nearly the same gray level as white matter in
+    Nissl) and regions under ``min_region`` px are dropped. With ``connected``
+    (the GUI's behaviour) every continuous block of that gray level touched by
+    the scribble is returned; otherwise every matching block in the image.
+    Blocks are solid: holes up to ``max_hole`` px inside them (vessels, dark
+    streaks, grain) are filled, larger enclosed areas are left alone.
+    Background pixels are never returned. ``smoothed`` may pass a cached copy of
+    the smoothed image. Returns (bool mask, low, high).
+    """
+    scribble = np.asarray(scribble, dtype=bool)
+    empty = np.zeros(scribble.shape, bool)
+    if smoothed is not None:
+        smooth = smoothed
+    elif sigma > 0:
+        smooth = ndimage.gaussian_filter(np.asarray(gray, dtype=np.float32), sigma)
+    else:
+        smooth = np.asarray(gray, dtype=np.float32)
+    usable = scribble if background is None else scribble & ~background
+    if not usable.any():
+        return empty, 0.0, 0.0
+    samples = smooth[usable]
+    # centre on the dominant gray level (histogram peak), so a scribble that
+    # strays over an edge into another tissue does not widen the range
+    hist, edges = np.histogram(samples, bins=128, range=(0.0, 256.0))
+    hist = ndimage.gaussian_filter1d(hist.astype(np.float32), 1.5)
+    peak = float(edges[int(np.argmax(hist))] + 1.0)
+    core = samples[np.abs(samples - peak) <= 1.5 * max_spread]
+    centre = float(np.median(core)) if core.size else peak
+    robust_sd = 1.4826 * float(np.median(np.abs(core - centre))) if core.size else 0.0
+    half = float(np.clip(spread * robust_sd, min_spread, max_spread))
+    low, high = centre - half, centre + half
+
+    raw = (smooth >= low) & (smooth <= high)
+    if background is not None:
+        raw &= ~background
+    window = (slice(None), slice(None))
+    if connected:
+        # Opening only shrinks blocks, so the answer lies inside the raw blocks
+        # touched by the scribble: do the expensive steps in their bounding box.
+        raw_labels, _count = ndimage.label(raw)
+        touched = np.unique(raw_labels[usable & raw])
+        touched = touched[touched > 0]
+        if not len(touched):
+            return empty, low, high
+        rows, cols = np.where(np.isin(raw_labels, touched))
+        pad = open_radius + 2
+        window = (slice(max(0, rows.min() - pad), min(raw.shape[0], rows.max() + pad + 1)),
+                  slice(max(0, cols.min() - pad), min(raw.shape[1], cols.max() + pad + 1)))
+    sub = raw[window]
+    if open_radius > 0:
+        sub = ndimage.binary_opening(sub, structure=_disk(open_radius))
+    sub = remove_small_islands(sub, min_region)
+    if connected:
+        labels, _count = ndimage.label(sub)
+        hit = np.unique(labels[usable[window] & sub])
+        hit = hit[hit > 0]
+        sub = np.isin(labels, hit) if len(hit) else np.zeros(sub.shape, bool)
+    sub = _fill_small_holes(sub, max_hole)
+    if background is not None:
+        sub = sub & ~background[window]
+    region = empty
+    region[window] = sub
+    return region, low, high
+
+
+def _fill_small_holes(region: np.ndarray, max_hole: int) -> np.ndarray:
+    """Fill enclosed holes of at most ``max_hole`` px."""
+    if max_hole <= 0 or not region.any():
+        return region
+    holes = ndimage.binary_fill_holes(region) & ~region
+    hole_labels, count = ndimage.label(holes)
+    if count:
+        sizes = np.bincount(hole_labels.ravel())
+        small = sizes <= max_hole
+        small[0] = False
+        region = region | small[hole_labels]
+    return region
