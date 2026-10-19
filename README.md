@@ -503,7 +503,9 @@ The status bar shows:
 - **Otsu (t)** resets the active scope (ROI if one is active, otherwise the
   whole image) to the initial band and turns **Invert** off.
 - Moving a slider or toggling Invert **replaces mask pixels inside the active
-  scope**; brush edits elsewhere are preserved. **Undo** still works.
+  scope**; brush edits elsewhere are preserved. **Undo** reverts the mask
+  *and* moves the sliders (and Invert) back to where they were; each slider
+  drag, from press to release, is its own undo step.
 - Slider updates are coalesced (about every 30 ms) so dragging stays
   responsive. The latest value is always applied before you paint, save, or
   change section.

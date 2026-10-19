@@ -150,6 +150,54 @@ class HistoryTests(unittest.TestCase):
         self.assertFalse(gui.rois[0].mask[:10].any())
 
 
+class _ThrGui(_HistGui):
+    """Adds threshold sliders: apply() mimics ThresholdMixin.apply_threshold."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.global_threshold_min, self.global_threshold_max, self.global_invert = 0, 100, False
+        self.threshold_min, self.threshold_max = 0, 100
+        self.last_action = None
+        self.commit_threshold_state()
+
+    def _load_threshold_scope(self):
+        roi = self.active_roi()
+        src = roi if roi is not None else None
+        if src is not None:
+            self.threshold_min, self.threshold_max = src.threshold_min, src.threshold_max
+        else:
+            self.threshold_min, self.threshold_max = self.global_threshold_min, self.global_threshold_max
+
+    def slide(self, low: int, high: int) -> None:   # one motion event of a slider drag
+        self.threshold_min, self.threshold_max = low, high
+        self.global_threshold_min, self.global_threshold_max = low, high
+        if self.last_action != "threshold":
+            self.push_undo("threshold")
+        arr = np.zeros((20, 20), np.uint8)
+        arr[:, :high // 10] = 255
+        self.base_mask_img = Image.fromarray(arr)
+        self.commit_threshold_state()
+
+
+class ThresholdUndoTests(unittest.TestCase):
+    def test_undo_moves_sliders_back_and_each_drag_is_one_step(self) -> None:
+        gui = _ThrGui()
+        gui.slide(0, 90); gui.slide(0, 80)      # drag 1 (two motion events)
+        gui.end_threshold_drag()
+        gui.slide(0, 60); gui.slide(0, 50)      # drag 2
+        gui.end_threshold_drag()
+        self.assertEqual(len(gui.undo_stack), 2)
+        gui.undo()                               # back to the end of drag 1
+        self.assertEqual((gui.threshold_min, gui.threshold_max), (0, 80))
+        self.assertEqual(int((np.asarray(gui.base_mask_img) > 0).sum()), 20 * 8)
+        gui.undo()                               # back to before drag 1
+        self.assertEqual(gui.threshold_max, 100)
+        gui.redo()
+        self.assertEqual(gui.threshold_max, 80)
+        gui.redo()
+        self.assertEqual(gui.threshold_max, 50)
+
+
 class CleanScopeTests(unittest.TestCase):
     def test_clean_ignores_active_selection_and_keep_strokes_toggle(self) -> None:
         img, ring = ring_image()

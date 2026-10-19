@@ -145,6 +145,7 @@ class ThresholdMixin:
                 bbox=bbox,
             )
         self._sync_threshold_scope()
+        self.commit_threshold_state()
         self.mask_source = "threshold"
         self.mark_edited()
 

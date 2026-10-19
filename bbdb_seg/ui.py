@@ -122,6 +122,8 @@ class UiMixin:
             takefocus=False, highlightthickness=0,
         )
         self.threshold_max_scale.pack(side="left", padx=(0, 8))
+        for scale in (self.threshold_min_scale, self.threshold_max_scale):
+            scale.bind("<ButtonRelease-1>", self.end_threshold_drag, add="+")
         ttk.Button(row, text="Otsu (t)", command=self.reset_threshold).pack(side="left")
         ttk.Checkbutton(
             row, text="Invert (i)", variable=self.invert_var, command=self.on_invert_change,
