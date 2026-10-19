@@ -212,18 +212,26 @@ class StrokeSmoothMixin:
         mask = apply_transform(np.asarray(self.base_mask_img), self.flip, self.rotation)
         stencil = Image.fromarray(np.ascontiguousarray(mask[sy0:sy1, sx0:sx1]), "L").transform(
             size, Image.Transform.AFFINE, matrix, resample=NEAREST)
-        red = Image.new("RGBA", size, (255, 40, 40, self.overlay_alpha))
-        layer = Image.new("RGBA", size, (0, 0, 0, 0))
+        disp_block = self._display_block()
+        if disp_block is not None and disp_block[sy0:sy1, sx0:sx1].any():
+            block_stencil = Image.fromarray(
+                np.ascontiguousarray(disp_block[sy0:sy1, sx0:sx1]), "L").transform(
+                size, Image.Transform.AFFINE, matrix, resample=NEAREST)
+            alpha = min(255, int(self.overlay_alpha * BLOCK_ALPHA_GAIN))
+            rgb.paste(BLOCK_COLOUR, (0, 0), block_stencil.point(lambda v, a=alpha: a if v else 0))
+        red_alpha = int(self.overlay_alpha)
+        rgb.paste((255, 40, 40), (0, 0), stencil.point(lambda v, a=red_alpha: a if v else 0))
+        return rgb, offset_x + ox0, offset_y + oy0
+
+    def _display_block(self) -> np.ndarray | None:
+        """Blue (rejected) layer as a flipped/rotated 0/255 array (cached)."""
         block = getattr(self, "block_mask", None)
-        if block is not None and block.shape == np.asarray(self.base_mask_img).shape:
-            disp_block = apply_transform(block.astype(np.uint8) * 255, self.flip, self.rotation)
-            if disp_block[sy0:sy1, sx0:sx1].any():
-                block_stencil = Image.fromarray(
-                    np.ascontiguousarray(disp_block[sy0:sy1, sx0:sx1]), "L").transform(
-                    size, Image.Transform.AFFINE, matrix, resample=NEAREST)
-                alpha = min(255, int(self.overlay_alpha * BLOCK_ALPHA_GAIN))
-                layer.paste(Image.new("RGBA", size, (*BLOCK_COLOUR, alpha)),
-                            (0, 0), block_stencil)
-        layer.paste(red, (0, 0), stencil)
-        out = Image.alpha_composite(rgb.convert("RGBA"), layer).convert("RGB")
-        return out, offset_x + ox0, offset_y + oy0
+        if block is None or self.base_mask_img is None or \
+                block.shape != (self.base_mask_img.height, self.base_mask_img.width):
+            return None
+        key = (id(block), self.flip, self.rotation)
+        if getattr(self, "_display_block_key", None) != key:
+            self._display_block_cache = apply_transform(
+                block.astype(np.uint8) * 255, self.flip, self.rotation)
+            self._display_block_key = key
+        return self._display_block_cache
