@@ -74,6 +74,7 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         csv_path: Path | None,
         data_root_override: str | None = None,
         seg_root_override: str | None = None,
+        init_dir_override: str | None = None,
     ) -> None:
         super().__init__()
         self.title(APP_TITLE)
@@ -81,6 +82,7 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         self.aborted = False
 
         self.seg_root = Path(seg_root_override).expanduser().resolve() if seg_root_override else REPO_ROOT
+        self.init_dir = Path(init_dir_override).expanduser().resolve() if init_dir_override else None
         resolved = self.resolve_inputs(csv_path, data_root_override)
         if resolved is None:
             self.aborted = True
@@ -291,13 +293,21 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--data-root", default=None, help="brain_biodiversity_bank folder containing v.1/ (auto-detected by default)")
     parser.add_argument("--seg-root", default=None, help="folder the CSV 'segmentation' paths are relative to (default: this folder)")
+    parser.add_argument(
+        "--init-dir",
+        default=None,
+        help=(
+            "folder of predicted starting masks, used only for sections with no saved "
+            "mask yet; accepts <group>/<base>.png, <group>__<base>.png or <base>.png"
+        ),
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     csv_path = Path(args.csv).expanduser().resolve() if args.csv else None
-    app = SegmentGui(csv_path, args.data_root, args.seg_root)
+    app = SegmentGui(csv_path, args.data_root, args.seg_root, args.init_dir)
     if app.aborted:
         app.destroy()
         return
