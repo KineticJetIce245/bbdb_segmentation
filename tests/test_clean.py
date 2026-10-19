@@ -4,6 +4,7 @@ from __future__ import annotations
 import unittest
 
 import numpy as np
+from PIL import Image
 from scipy import ndimage
 
 import bbdb_seg.clean as clean_module
@@ -38,6 +39,17 @@ class BackgroundTests(unittest.TestCase):
         bg = background_mask(img)
         self.assertTrue(bg[0, 0])
         self.assertFalse(bg[ndimage.binary_erosion(ring, iterations=2)].any())
+
+
+class ColourBackgroundTests(unittest.TestCase):
+    def test_cream_rim_is_tissue_with_colour_background_without(self) -> None:
+        rgb = np.full((80, 80, 3), 255, np.uint8)
+        rgb[20:60, 20:60] = (90, 90, 95)              # dark myelin-stained tissue
+        rgb[16:20, 20:60] = (249, 248, 236)           # faint cream cortex rim
+        gray = np.asarray(Image.fromarray(rgb).convert("L"))
+        self.assertTrue(background_mask(gray, margin=0)[18, 40])            # gray-only: lost
+        self.assertFalse(background_mask(gray, margin=0, rgb=rgb)[18, 40])  # colour: tissue
+        self.assertTrue(background_mask(gray, margin=0, rgb=rgb)[5, 5])     # slide still bg
 
 
 class CleanTests(unittest.TestCase):

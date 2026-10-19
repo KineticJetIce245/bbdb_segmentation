@@ -23,6 +23,7 @@ import numpy as np
 from scipy import ndimage
 
 from .settings import (
+    BG_CHROMA_TOLERANCE,
     BG_MARGIN,
     BG_TOLERANCE,
     CLEAN_BAND,
@@ -52,10 +53,16 @@ def _disk(radius: int) -> np.ndarray:
     return (xx * xx + yy * yy) <= radius * radius
 
 
+def _border(values: np.ndarray) -> np.ndarray:
+    return np.concatenate([values[0], values[-1], values[:, 0], values[:, -1]]).astype(np.float32)
+
+
 def background_mask(
     gray: np.ndarray,
     tolerance: int | None = BG_TOLERANCE,
     margin: int = BG_MARGIN,
+    rgb: np.ndarray | None = None,
+    chroma_tolerance: float = BG_CHROMA_TOLERANCE,
 ) -> np.ndarray:
     """Bool mask of pixels within ``tolerance`` of the border (background) level.
 
@@ -63,13 +70,28 @@ def background_mask(
     dark backgrounds all work. ``tolerance`` widens automatically when the
     border is noisy. ``margin`` grows the result by that many pixels to absorb
     the blurry tissue rim.
+
+    With ``rgb`` (same height/width), a pixel must also have the background's
+    colour: the faint cream edge of myelin-stained cortex or a pale purple Nissl
+    rim is nearly as bright as a white slide, but tinted, so it counts as
+    tissue. Colour is measured on two opponent channels (blue vs red+green, red
+    vs green), lightly smoothed against JPEG noise.
     """
     gray = np.asarray(gray)
-    border = np.concatenate([gray[0], gray[-1], gray[:, 0], gray[:, -1]]).astype(np.float32)
+    border = _border(gray)
     level = float(np.median(border))
     spread = float(np.median(np.abs(border - level)))  # robust border noise
     tol = max(float(tolerance or 0), 3.0 * spread)
     bg = np.abs(gray.astype(np.float32) - level) <= tol
+    if rgb is not None and np.asarray(rgb).shape[:2] == gray.shape and np.asarray(rgb).ndim == 3:
+        colour = np.asarray(rgb, dtype=np.float32)
+        for channel in (colour[..., 2] - 0.5 * (colour[..., 0] + colour[..., 1]),
+                        colour[..., 0] - colour[..., 1]):
+            channel = ndimage.gaussian_filter(channel, 1.0)
+            edge = _border(channel)
+            centre = float(np.median(edge))
+            ctol = max(float(chroma_tolerance), 3.0 * float(np.median(np.abs(edge - centre))))
+            bg &= np.abs(channel - centre) <= ctol
     if margin > 0:
         bg = ndimage.binary_dilation(bg, structure=_disk(1), iterations=margin)
     return bg

@@ -28,11 +28,22 @@ class CleanMixin:
 
     # --- exclusion masks ---------------------------------------------------- #
 
+    def _section_rgb(self) -> np.ndarray | None:
+        """Colour version of the current section at working size (for background)."""
+        try:
+            from .image_ops import load_rgb_work
+            from .paths import resolve_path
+            path = resolve_path(self.data_root, self.records.at[self.index, "image"])
+            return load_rgb_work(path, self.base_img.shape)
+        except Exception:
+            return None   # gray-only detection still works
+
     def _refresh_exclusions(self) -> None:
         key = id(self.base_img)
         if self.excl_cache_key != key or self.bg_soft is None:
-            self.bg_strict = background_mask(self.base_img, margin=0)
-            self.bg_soft = background_mask(self.base_img)
+            rgb = self._section_rgb()
+            self.bg_strict = background_mask(self.base_img, margin=0, rgb=rgb)
+            self.bg_soft = background_mask(self.base_img, rgb=rgb)
             self.legend = legend_mask(self.base_img, background=self.bg_strict)
             self.excl_cache_key = key
 

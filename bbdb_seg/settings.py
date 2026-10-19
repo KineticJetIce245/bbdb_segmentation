@@ -45,3 +45,4 @@ PICK_MIN_REGION = 50     # px; picked regions smaller than this are ignored
 PICK_MAX_HOLE = 400      # px; holes up to this size inside a picked block are filled (vessels, streaks)
 BLOCK_COLOUR = (15, 35, 170)  # transparent dark blue: regions rejected with the colour picker
 BLOCK_ALPHA_GAIN = 1.4        # blue is drawn a bit more opaque than the red mask so it reads on pale tissue
+BG_CHROMA_TOLERANCE = 4  # colour units (blue vs red/green, red vs green); tinted pixels are tissue, not background

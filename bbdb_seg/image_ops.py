@@ -32,6 +32,15 @@ def load_gray_work(path: Path) -> tuple[np.ndarray, tuple[int, int]]:
         return np.asarray(img, dtype=np.uint8).copy(), native_hw
 
 
+def load_rgb_work(path: Path, work_hw: tuple[int, int]) -> np.ndarray:
+    """Load an image as RGB uint8 resized to the working (h, w)."""
+    with Image.open(path) as img:
+        img = img.convert("RGB")
+        if (img.height, img.width) != tuple(work_hw):
+            img = img.resize((work_hw[1], work_hw[0]), LANCZOS)
+        return np.asarray(img, dtype=np.uint8).copy()
+
+
 def load_mask_work(path: Path, work_hw: tuple[int, int]) -> np.ndarray:
     """Load a mask PNG (any value > 0 is foreground) as 0/255 at working size."""
     with Image.open(path) as img:

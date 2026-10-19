@@ -243,7 +243,9 @@ What this means for the threshold tool:
   estimated from the image border, and background pixels (plus a 1-px margin
   for the blurry tissue rim) are never selected, whether by the threshold
   sliders, brush strokes or the fill bucket. White, grey or dark backgrounds
-  all work.
+  all work. Colour is used too: a pixel only counts as background if it also
+  has the slide's colour, so the faint cream edge of myelin-stained cortex
+  (almost as bright as a white slide, but tinted) stays selectable.
 - **Clean (k)** tidies the mask in one undoable step. It removes background
   pixels, snaps the boundary onto the strongest nearby image edge (a 3-px band,
   marker-controlled watershed: the outline can move up to that edge but never
