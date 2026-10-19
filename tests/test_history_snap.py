@@ -119,6 +119,19 @@ class ColourPickTests(unittest.TestCase):
         self.assertLess(region[layer1].mean(), 0.05)
 
 
+class BlueLayerTests(unittest.TestCase):
+    def test_blue_layer_is_excluded_everywhere(self) -> None:
+        img, ring = ring_image()
+        gui = _FakeGui(img, np.zeros(img.shape, bool))
+        gui.block_mask = np.zeros(img.shape, bool)
+        gui.block_mask[50:70, 50:70] = True               # tissue interior marked blue
+        full = np.full(img.shape, 255, np.uint8)
+        kept = gui.exclude_background(full, strict=True)  # what brush/fill/threshold keep
+        self.assertFalse(kept[50:70, 50:70].any())
+        self.assertTrue(kept[60, 25])                     # cortex ring elsewhere untouched
+        self.assertTrue(gui.current_excluded()[55, 55])   # Clean treats it as never-cortex
+
+
 class _HistGui(HistoryMixin):
     """Minimal stand-in for SegmentGui's history-related state."""
 

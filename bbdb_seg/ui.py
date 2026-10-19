@@ -52,6 +52,7 @@ class UiMixin:
         ttk.Button(row, text="Fill (f)", command=lambda: self.set_tool("fill")).pack(side="left", padx=(2, 0))
         ttk.Button(row, text="Brush select (L)", command=lambda: self.set_tool("select")).pack(side="left", padx=(2, 0))
         ttk.Button(row, text="Colour pick (p)", command=lambda: self.set_tool("pick")).pack(side="left", padx=(2, 0))
+        ttk.Button(row, text="Clear blue", command=self.clear_block_layer).pack(side="left", padx=(2, 0))
         ttk.Button(row, text="Undo (Ctrl+Z)", command=self.undo).pack(side="left", padx=(2, 0))
         ttk.Button(row, text="Redo (Ctrl+Y)", command=self.redo).pack(side="left", padx=(2, 0))
         ttk.Button(row, text="Clear mask", command=self.clear_mask).pack(side="left", padx=(2, 10))

@@ -91,6 +91,8 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         self._init_edit_state()
         self._init_clean_state()
         self._init_pick_state()
+        self.block_mask = None
+        self.block_layers = {}
         self.reset_smoothing()
         self._init_brush_select_state()
         self._init_view_state()

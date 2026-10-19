@@ -98,6 +98,7 @@ class IOMixin:
         self.mask_dirty = False
         self.undo_stack.clear()
         self.redo_stack.clear()
+        self.load_block_layer()
         self.commit_threshold_state()
         self.last_action = None
         self.disp_index = None

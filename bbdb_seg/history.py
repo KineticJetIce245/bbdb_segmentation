@@ -36,7 +36,7 @@ class HistoryMixin:
         # the settings that produced the current mask (sliders may already
         # have moved on for the change about to be applied)
         thr = getattr(self, "_thr_committed", None) or self._threshold_snapshot()
-        self._push_history(("mask", self.base_mask_img.copy(), thr))
+        self._push_history(("mask", self.base_mask_img.copy(), thr, self._block_snapshot()))
         self.last_action = action
 
     # --- threshold settings -------------------------------------------------- #
@@ -50,6 +50,10 @@ class HistoryMixin:
             "rois": {roi.roi_id: (int(roi.threshold_min), int(roi.threshold_max), bool(roi.invert))
                      for roi in self.rois},
         }
+
+    def _block_snapshot(self):
+        block = getattr(self, "block_mask", None)
+        return None if block is None else block.copy()
 
     def commit_threshold_state(self) -> None:
         """Record the settings that produced the current mask (after apply/restore/load)."""
@@ -84,7 +88,8 @@ class HistoryMixin:
         if kind == "mask":
             if self.base_mask_img is None:
                 return None
-            return ("mask", self.base_mask_img.copy(), self._threshold_snapshot())
+            return ("mask", self.base_mask_img.copy(), self._threshold_snapshot(),
+                    self._block_snapshot())
         return self._roi_snapshot()
 
     def _restore(self, entry: tuple, op: str) -> None:
@@ -92,6 +97,8 @@ class HistoryMixin:
             before = np.asarray(self.base_mask_img).copy()
             self.base_mask_img = entry[1]
             self._restore_threshold(entry[2] if len(entry) > 2 else None)
+            if len(entry) > 3 and hasattr(self, "set_block_layer"):
+                self.set_block_layer(entry[3])
             restored = getattr(self, "on_mask_restored", None)
             if restored is not None:
                 restored()

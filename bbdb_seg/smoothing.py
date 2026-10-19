@@ -22,6 +22,8 @@ from .image_ops import BILINEAR, NEAREST
 from .transforms import apply_transform
 from .view_math import visible_bounds
 from .settings import (
+    BLOCK_ALPHA_GAIN,
+    BLOCK_COLOUR,
     LASSO_SMOOTH_ITERATIONS,
     ONE_EURO_BETA,
     ONE_EURO_D_CUTOFF,
@@ -212,6 +214,16 @@ class StrokeSmoothMixin:
             size, Image.Transform.AFFINE, matrix, resample=NEAREST)
         red = Image.new("RGBA", size, (255, 40, 40, self.overlay_alpha))
         layer = Image.new("RGBA", size, (0, 0, 0, 0))
+        block = getattr(self, "block_mask", None)
+        if block is not None and block.shape == np.asarray(self.base_mask_img).shape:
+            disp_block = apply_transform(block.astype(np.uint8) * 255, self.flip, self.rotation)
+            if disp_block[sy0:sy1, sx0:sx1].any():
+                block_stencil = Image.fromarray(
+                    np.ascontiguousarray(disp_block[sy0:sy1, sx0:sx1]), "L").transform(
+                    size, Image.Transform.AFFINE, matrix, resample=NEAREST)
+                alpha = min(255, int(self.overlay_alpha * BLOCK_ALPHA_GAIN))
+                layer.paste(Image.new("RGBA", size, (*BLOCK_COLOUR, alpha)),
+                            (0, 0), block_stencil)
         layer.paste(red, (0, 0), stencil)
         out = Image.alpha_composite(rgb.convert("RGBA"), layer).convert("RGB")
         return out, offset_x + ox0, offset_y + oy0

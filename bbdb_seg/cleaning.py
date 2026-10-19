@@ -52,6 +52,9 @@ class CleanMixin:
             excluded |= self.bg_strict if strict else self.bg_soft
         if bool(self.exclude_legend_var.get()):
             excluded |= self.legend
+        block = getattr(self, "block_mask", None)
+        if block is not None and block.shape == excluded.shape:
+            excluded |= block           # rejected with the colour picker (blue)
         return excluded
 
     def exclude_background(self, mask_arr: np.ndarray, strict: bool = False) -> np.ndarray:

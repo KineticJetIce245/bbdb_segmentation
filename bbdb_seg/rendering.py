@@ -9,7 +9,7 @@ from PIL import Image, ImageTk
 
 from .transforms import apply_transform
 from .image_ops import BILINEAR, NEAREST, apply_contrast as contrast_array
-from .settings import MIN_ZOOM
+from .settings import BLOCK_ALPHA_GAIN, BLOCK_COLOUR, MIN_ZOOM
 from .view_math import (
     clamp_pan as clamp_pan_value,
     fit_scale,
@@ -106,18 +106,28 @@ class RenderMixin:
                 self.canvas.itemconfigure(self.ov_id, state="hidden")
             return
 
+        matrix = (1.0 / self.display_scale, 0.0, left / self.display_scale,
+                  0.0, 1.0 / self.display_scale, top / self.display_scale)
         source = Image.fromarray(disp_mask, "L")
         stencil = source.transform(
-            (right - left, bottom - top),
-            Image.Transform.AFFINE,
-            (1.0 / self.display_scale, 0.0, left / self.display_scale,
-             0.0, 1.0 / self.display_scale, top / self.display_scale),
-            resample=NEAREST,
+            (right - left, bottom - top), Image.Transform.AFFINE, matrix, resample=NEAREST,
         )
-        self._set_overlay_photo(stencil, offset_x + left, offset_y + top)
+        block_stencil = None
+        block = getattr(self, "block_mask", None)
+        if block is not None and block.shape == mask_np.shape and block.any():
+            disp_block = apply_transform(block.astype(np.uint8) * 255, self.flip, self.rotation)
+            block_stencil = Image.fromarray(disp_block, "L").transform(
+                (right - left, bottom - top), Image.Transform.AFFINE, matrix, resample=NEAREST,
+            )
+        self._set_overlay_photo(stencil, offset_x + left, offset_y + top, block_stencil)
 
-    def _set_overlay_photo(self, stencil: Image.Image, x: float, y: float) -> None:
+    def _set_overlay_photo(self, stencil: Image.Image, x: float, y: float,
+                           block_stencil: Image.Image | None = None) -> None:
         rgba = Image.new("RGBA", stencil.size, (0, 0, 0, 0))
+        if block_stencil is not None:   # rejected regions (colour picker), under the mask
+            alpha = min(255, int(self.overlay_alpha * BLOCK_ALPHA_GAIN))
+            rgba.paste(Image.new("RGBA", stencil.size, (*BLOCK_COLOUR, alpha)),
+                       (0, 0), block_stencil)
         rgba.paste(
             Image.new("RGBA", stencil.size, (255, 40, 40, self.overlay_alpha)),
             (0, 0),

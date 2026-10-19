@@ -213,6 +213,13 @@ What this means for the threshold tool:
   is fine) on a slightly smoothed image, and thin bridges are cut so the pale
   cortical layers, which in Nissl have nearly the same gray level as white
   matter, stay untouched. An active selection limits the change to it.
+  **Rejected blocks turn transparent dark blue** and stay blue: blue pixels are
+  never cortex, so the threshold sliders, the brush, the fill bucket, Clean and
+  include-picks all leave them out, just like background. A handy workflow:
+  right-drag the white matter blue, then lasso the section and move the
+  threshold sliders; only non-blue tissue turns red. Ctrl+Z undoes a pick
+  (blue included); **Clear blue** removes the whole blue layer. The blue layer
+  is kept per section while the GUI is open; it is not saved to disk.
   The status bar shows the gray range used; each pick is one undo step.
 - Press **L** for **brush selection**: left-drag paints a blue region. On
   release it becomes a blue outline, then a normal ROI. Threshold changes then
@@ -472,7 +479,7 @@ matching section loads instead.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Brush select  Colour pick  Undo  Redo  Clear │ toolbar row 1
+│ < Prev  Next >  Rotate ±90  Flip H/V  Mode  Fill  Brush select  Colour pick  Clear blue  Undo  Redo  Clear │ toolbar row 1
 │ Erode/Dilate Clean Brush ± [14] px Accept ☑ Segmented ☐ Stop auto confirm ● done │ toolbar row 2
 │ Options: ☑ Exclude background ☑ Exclude legend ☑ Smooth ☑ Snap ☑ Keep strokes │ toolbar row 3
 ├──────────────────────────────────────────────────────────────────────────┤

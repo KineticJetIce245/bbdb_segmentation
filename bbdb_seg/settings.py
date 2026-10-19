@@ -43,3 +43,5 @@ PICK_MAX_SPREAD = 18.0   # gray levels; maximum half-width of the picked range
 PICK_OPEN = 2            # px; opening radius that cuts thin bridges (e.g. pale cortical layers)
 PICK_MIN_REGION = 50     # px; picked regions smaller than this are ignored
 PICK_MAX_HOLE = 400      # px; holes up to this size inside a picked block are filled (vessels, streaks)
+BLOCK_COLOUR = (15, 35, 170)  # transparent dark blue: regions rejected with the colour picker
+BLOCK_ALPHA_GAIN = 1.4        # blue is drawn a bit more opaque than the red mask so it reads on pale tissue
