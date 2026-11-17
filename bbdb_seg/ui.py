@@ -33,9 +33,12 @@ class UiMixin:
         bottom_row.pack(side="top", fill="x", pady=(4, 0))
         options_row = ttk.Frame(toolbar)
         options_row.pack(side="top", fill="x", pady=(4, 0))
+        unet_row = ttk.Frame(toolbar)
+        unet_row.pack(side="top", fill="x", pady=(4, 0))
         self._build_toolbar_actions(top_row)
         self._build_toolbar_brush(bottom_row)
         self._build_toolbar_options(options_row)
+        self._build_toolbar_unet(unet_row)
 
     def _build_toolbar_actions(self, row: ttk.Frame) -> None:
         ttk.Button(row, text="< Prev", command=lambda: self.move(-1)).pack(side="left")
@@ -71,6 +74,29 @@ class UiMixin:
             kwargs = {"command": command} if command is not None else {}
             ttk.Checkbutton(row, text=text, variable=var, takefocus=False, **kwargs).pack(
                 side="left", padx=(2, 8))
+
+    def _build_toolbar_unet(self, row: ttk.Frame) -> None:
+        """Fourth toolbar row: optional UNet predictions (yellow)."""
+        ttk.Label(row, text="UNet:").pack(side="left", padx=(0, 4))
+        ttk.Checkbutton(
+            row, text="Use model", variable=self.unet_var,
+            command=self.on_unet_toggle, takefocus=False,
+        ).pack(side="left", padx=(0, 8))
+        ttk.Button(row, text="Run UNet", command=self.run_unet_current).pack(
+            side="left", padx=(0, 4))
+        self.load_prediction_button = ttk.Button(
+            row, text="Load prediction", command=self.load_cached_prediction)
+        self.load_prediction_button.pack(side="left", padx=(0, 4))
+        self.load_prediction_button.state(["disabled"])
+        self.clear_prediction_button = ttk.Button(
+            row, text="Clear prediction", command=self.clear_cached_prediction)
+        self.clear_prediction_button.pack(side="left", padx=(0, 4))
+        self.clear_prediction_button.state(["disabled"])
+        self.use_prediction_button = ttk.Button(
+            row, text="Use prediction", command=self.use_prediction)
+        self.use_prediction_button.pack(side="left", padx=(0, 8))
+        self.use_prediction_button.state(["disabled"])
+        ttk.Label(row, textvariable=self.unet_status_var).pack(side="left", padx=(8, 0))
 
     def _build_toolbar_brush(self, row: ttk.Frame) -> None:
         ttk.Button(row, text="Erode (E)", command=self.erode_mask).pack(side="left")

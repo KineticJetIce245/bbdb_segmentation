@@ -24,6 +24,10 @@ Features
   * Zoom with the mouse wheel or +/- and pan with the middle mouse button or
     Ctrl+left-drag. The view transform never changes the saved mask.
   * Masks are saved as 0/1 PNGs at the image's native resolution.
+  * Optional 504 nnU-Net predictions: "Use model" starts a persistent worker,
+    unsegmented sections start from a yellow prediction, and "Use prediction"
+    can overwrite the working mask. Predictions are cached in
+    ``segmentations/UNet_output/``.
 
 Usage
   python segment_gui.py csv/lion_nissl.csv
@@ -42,6 +46,7 @@ from PIL import Image
 
 from .session import IOMixin
 from .status import StatusMixin
+from .unet import UnetMixin
 from .brush_erase import BrushEraseMixin
 from .cleaning import CleanMixin
 from .history import HistoryMixin
@@ -68,13 +73,16 @@ from .settings import (
 )
 
 
-class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, LassoMixin, CleanMixin, StrokeSmoothMixin, HistoryMixin, PickMixin, PaintMixin, BrushSelectMixin, BrushEraseMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
+class SegmentGui(QueueMixin, IOMixin, StatusMixin, UnetMixin, ThresholdMixin, RoiMixin, LassoMixin, CleanMixin, StrokeSmoothMixin, HistoryMixin, PickMixin, PaintMixin, BrushSelectMixin, BrushEraseMixin, ToolsMixin, RenderMixin, UiMixin, tk.Tk):
     def __init__(
         self,
         csv_path: Path | None,
         data_root_override: str | None = None,
         seg_root_override: str | None = None,
         init_dir_override: str | None = None,
+        unet_model_override: str | None = None,
+        unet_python_override: str | None = None,
+        unet_device_override: str | None = None,
     ) -> None:
         super().__init__()
         self.title(APP_TITLE)
@@ -83,6 +91,9 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
 
         self.seg_root = Path(seg_root_override).expanduser().resolve() if seg_root_override else REPO_ROOT
         self.init_dir = Path(init_dir_override).expanduser().resolve() if init_dir_override else None
+        self.unet_model_override = unet_model_override
+        self.unet_python_override = unet_python_override
+        self.unet_device_override = unet_device_override
         resolved = self.resolve_inputs(csv_path, data_root_override)
         if resolved is None:
             self.aborted = True
@@ -99,6 +110,7 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         self._init_brush_select_state()
         self._init_view_state()
         self._init_tk_vars()
+        self._init_unet_state()
         self._init_window()
 
     def _init_document_state(self) -> None:
@@ -212,6 +224,8 @@ class SegmentGui(QueueMixin, IOMixin, StatusMixin, ThresholdMixin, RoiMixin, Las
         self.segmented_var = tk.BooleanVar(value=False)
         self.stop_auto_confirm_var = tk.BooleanVar(value=False)
         self.queue_filter_var = tk.StringVar(value="all")
+        self.unet_var = tk.BooleanVar(value=False)
+        self.unet_status_var = tk.StringVar(value="UNet: off")
 
     def _init_window(self) -> None:
         self.geometry("1500x950")
@@ -301,13 +315,32 @@ def parse_args() -> argparse.Namespace:
             "mask yet; accepts <group>/<base>.png, <group>__<base>.png or <base>.png"
         ),
     )
+    parser.add_argument(
+        "--unet-model",
+        default=None,
+        help="nnU-Net model folder for the UNet toolbar (default: bbdb_model_504)",
+    )
+    parser.add_argument(
+        "--unet-python",
+        default=None,
+        help="interpreter of the nnU-Net environment (default: .venv-nnunet)",
+    )
+    parser.add_argument(
+        "--unet-device",
+        default=None,
+        choices=["auto", "cuda", "mps", "cpu"],
+        help="device passed to the UNet worker (default: auto)",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     csv_path = Path(args.csv).expanduser().resolve() if args.csv else None
-    app = SegmentGui(csv_path, args.data_root, args.seg_root, args.init_dir)
+    app = SegmentGui(
+        csv_path, args.data_root, args.seg_root, args.init_dir,
+        args.unet_model, args.unet_python, args.unet_device,
+    )
     if app.aborted:
         app.destroy()
         return

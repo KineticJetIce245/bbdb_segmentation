@@ -9,7 +9,12 @@ from PIL import Image, ImageTk
 
 from .transforms import apply_transform
 from .image_ops import BILINEAR, NEAREST, apply_contrast as contrast_array
-from .settings import BLOCK_ALPHA_GAIN, BLOCK_COLOUR, MIN_ZOOM
+from .settings import (
+    BLOCK_ALPHA_GAIN,
+    BLOCK_COLOUR,
+    MIN_ZOOM,
+    UNET_PREDICTION_COLOUR,
+)
 from .view_math import (
     clamp_pan as clamp_pan_value,
     fit_scale,
@@ -122,33 +127,62 @@ class RenderMixin:
             block_stencil = Image.fromarray(disp_block, "L").transform(
                 (right - left, bottom - top), Image.Transform.AFFINE, matrix, resample=NEAREST,
             )
-        self._set_overlay_photo(stencil, offset_x + left, offset_y + top, block_stencil)
+        pred_stencil = None
+        separate = getattr(self, "prediction_separate", None)
+        if separate is not None and separate():
+            disp_pred = apply_transform(np.asarray(self.prediction_img), self.flip, self.rotation)
+            pred_stencil = Image.fromarray(disp_pred, "L").transform(
+                (right - left, bottom - top), Image.Transform.AFFINE, matrix, resample=NEAREST,
+            )
+        self._set_overlay_photo(stencil, offset_x + left, offset_y + top,
+                                block_stencil, pred_stencil)
 
     def _set_overlay_photo(self, stencil: Image.Image, x: float, y: float,
-                           block_stencil: Image.Image | None = None) -> None:
+                           block_stencil: Image.Image | None = None,
+                           pred_stencil: Image.Image | None = None) -> None:
+        # A prediction used as the working mask is yellow until the first edit;
+        # a separate prediction (Run UNet on a saved section) is yellow on top
+        # of the red manual mask.
+        base_colour = (
+            UNET_PREDICTION_COLOUR
+            if (getattr(self, "mask_source", "") == "unet"
+                and getattr(self, "prediction_yellow", False)
+                and pred_stencil is None)
+            else (255, 40, 40)
+        )
+        alpha = int(self.overlay_alpha)
         background = getattr(self, "bg_visible", None)
         if (background is not None and background.size == stencil.size
                 and getattr(self, "bg_place", None) == (x, y)):
-            # Fast path: blend red/blue onto the cached background and show one
+            # Fast path: blend colours onto the cached background and show one
             # opaque RGB image on top of it.
             out = background.copy()
             if block_stencil is not None:
-                alpha = min(255, int(self.overlay_alpha * BLOCK_ALPHA_GAIN))
-                out.paste(BLOCK_COLOUR, (0, 0), block_stencil.point(lambda v, a=alpha: a if v else 0))
-            red_alpha = int(self.overlay_alpha)
-            out.paste((255, 40, 40), (0, 0), stencil.point(lambda v, a=red_alpha: a if v else 0))
+                block_alpha = min(255, int(self.overlay_alpha * BLOCK_ALPHA_GAIN))
+                out.paste(BLOCK_COLOUR, (0, 0),
+                          block_stencil.point(lambda v, a=block_alpha: a if v else 0))
+            out.paste(base_colour, (0, 0), stencil.point(lambda v, a=alpha: a if v else 0))
+            if pred_stencil is not None:
+                out.paste(UNET_PREDICTION_COLOUR, (0, 0),
+                          pred_stencil.point(lambda v, a=alpha: a if v else 0))
             self._place_overlay_image(out, x, y)
             return
         rgba = Image.new("RGBA", stencil.size, (0, 0, 0, 0))
         if block_stencil is not None:   # rejected regions (colour picker), under the mask
-            alpha = min(255, int(self.overlay_alpha * BLOCK_ALPHA_GAIN))
-            rgba.paste(Image.new("RGBA", stencil.size, (*BLOCK_COLOUR, alpha)),
+            block_alpha = min(255, int(self.overlay_alpha * BLOCK_ALPHA_GAIN))
+            rgba.paste(Image.new("RGBA", stencil.size, (*BLOCK_COLOUR, block_alpha)),
                        (0, 0), block_stencil)
         rgba.paste(
-            Image.new("RGBA", stencil.size, (255, 40, 40, self.overlay_alpha)),
+            Image.new("RGBA", stencil.size, (*base_colour, self.overlay_alpha)),
             (0, 0),
             stencil,
         )
+        if pred_stencil is not None:
+            rgba.paste(
+                Image.new("RGBA", stencil.size, (*UNET_PREDICTION_COLOUR, self.overlay_alpha)),
+                (0, 0),
+                pred_stencil,
+            )
         self._place_overlay_image(rgba, x, y)
 
     def _place_overlay_image(self, image: Image.Image, x: float, y: float) -> None:

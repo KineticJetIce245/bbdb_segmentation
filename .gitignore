@@ -10,6 +10,10 @@ env/
 # nnU-Net training outputs (large; regenerate with the scripts in nnunet_tools/)
 nnUNet/
 
+# Packaged inference model (large; unpack bbdb_504_model.zip)
+bbdb_model_504/
+predictions/
+
 # Source image data (large; distributed separately)
 brain_biodiversity_bank*/
 *.zip

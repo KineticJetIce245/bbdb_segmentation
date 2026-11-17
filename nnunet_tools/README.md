@@ -1,8 +1,9 @@
 # nnU-Net pipeline scripts
 
 Small scripts that turn the hand-drawn masks into a trained 2D nnU-Net model
-and back into starting masks for the GUI. They are not imported by the GUI;
-run them from the repository root.
+and back into starting masks for the GUI. `predict_worker.py` is started by the
+GUI's **Use model** checkbox; the other scripts are run by hand from the
+repository root.
 
 The training environment lives outside the GUI's environment, because nnU-Net
 pulls its own torch, SimpleITK and friends:
@@ -26,9 +27,24 @@ python -m venv .venv-nnunet
 
 `nnUNetTrainer_333epochs.py` is a copy of the file that must sit inside the
 installed package (`nnunetv2/training/nnUNetTrainer/variants/training_length/`)
-for `-tr nnUNetTrainer_333epochs` to resolve. Inference does not need it: the
-checkpoint is self-describing, so a packaged model can be run with the stock
-`nnUNetTrainer` name.
+for `-tr nnUNetTrainer_333epochs` to resolve. The packaged 504 checkpoint also
+records that trainer name, so inference needs the class too: copy it into the
+installed package before starting the worker. The stock `nnUNetTrainer` name is
+not enough (the packaged `HOWTO.txt` is wrong on this point).
+
+## Inference worker (used by the GUI)
+
+`predict_worker.py` loads the model once and then answers one JSON request per
+line. The GUI starts it with `.venv-nnunet/bin/python` and caches the masks in
+`segmentations/UNet_output/<group>/<base>.png`.
+
+```bash
+printf '{"cmd":"quit"}\n' | .venv-nnunet/bin/python nnunet_tools/predict_worker.py \
+    --model-dir bbdb_model_504 --device auto
+```
+
+`--model-dir` accepts the extracted `bbdb_model_504/` package or the trainer
+folder that contains `fold_0/`.
 
 ## Why synthetic images
 

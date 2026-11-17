@@ -14,7 +14,7 @@ from .image_ops import NEAREST, bright_background, load_gray_work, load_mask_wor
 from .ops_log import append_operation, operations_path
 from .paths import resolve_path
 from .roi import Roi
-from .settings import APP_TITLE, MAX_CACHE_ITEMS
+from .settings import APP_TITLE, MAX_CACHE_ITEMS, UNET_BADGE_COLOUR
 
 class IOMixin:
 
@@ -76,6 +76,7 @@ class IOMixin:
         self._load_section_mask(height, width)
         self._load_status()
         self._reset_section_view()
+        self.on_section_loaded()
 
     def _reset_section_rois(self) -> None:
         self.cancel_slider_updates()
@@ -236,6 +237,9 @@ class IOMixin:
             self._set_segmented(True, auto=True)
         else:
             self.update_status()
+        finalize = getattr(self, "finalize_prediction_after_save", None)
+        if finalize is not None:
+            finalize()
 
     def schedule_csv_save(self) -> None:
         if self.pending_save_id is not None:
@@ -266,6 +270,9 @@ class IOMixin:
 
     def on_close(self) -> None:
         self.commit_current()
+        shutdown = getattr(self, "shutdown_unet", None)
+        if shutdown is not None:
+            shutdown(render=False)
         self.destroy()
 
     # --- status ------------------------------------------------------------- #
@@ -292,6 +299,11 @@ class IOMixin:
         if self.segmented_status:
             self.done_var.set("\u25cf segmented")
             self.done_label.configure(fg="#2ca02c")
+        elif getattr(self, "prediction_active", None) and self.prediction_active():
+            # The prediction is the working mask but has not been edited or
+            # confirmed yet: show it where "not segmented" normally sits.
+            self.done_var.set("\u25cb predicted")
+            self.done_label.configure(fg=UNET_BADGE_COLOUR)
         else:
             self.done_var.set("\u25cb not segmented")
             self.done_label.configure(fg="#c0392b")
